@@ -28,7 +28,6 @@ library
     transformers,
     hashable,
     concurrency,
-    process,
     exceptions
 
   hs-source-dirs:
@@ -39,4 +38,3 @@ library
     Communication.Message
     Communication.Channel
     Communication.Stream
-    Communication.Process

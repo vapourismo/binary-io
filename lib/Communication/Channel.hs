@@ -11,7 +11,6 @@ module Communication.Channel
   , newWriter
   , Channel
   , newChannel
-  , newPipe
   , CanGet (..)
   , read
   , CanPut (..)
@@ -33,7 +32,6 @@ import qualified Data.Binary as Binary
 import System.IO (Handle)
 
 import qualified Communication.Stream as Stream
-import qualified Communication.Process as Process
 
 -- | An error that can occur during reading
 data ReaderError = ReaderGetError
@@ -111,22 +109,6 @@ newChannel
   -> m (Channel m)
 newChannel handle =
   Channel (newWriter handle) <$> newReader handle
-
--- | Create a new pipe. It can be used to for interprocess communication.
-newPipe
-  :: ( Catch.MonadThrow m
-     , Stream.MonadByteStream m
-     , Conc.MonadConc m
-     , Process.MonadProcess m
-     )
-  => m (Channel m)
-newPipe = do
-  (readHandle, writeHandle) <- Process.createPipe
-  reader <- newReader readHandle
-  pure Channel
-    { channelWriter = newWriter writeHandle
-    , channelReader = reader
-    }
 
 -- | @r@ can execute 'Binary.Get' operations
 class CanGet r where
