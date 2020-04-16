@@ -25,7 +25,9 @@ library
     bytestring,
     binary,
     mtl,
-    hashable
+    transformers,
+    hashable,
+    concurrency
 
   hs-source-dirs:
     lib
@@ -33,3 +35,5 @@ library
   exposed-modules:
     Communication
     Communication.Message
+    Communication.Channel
+    Communication.Stream
