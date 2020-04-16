@@ -21,10 +21,15 @@ library
     -Wall -Wno-name-shadowing
 
   build-depends:
-    base
+    base,
+    bytestring,
+    binary,
+    mtl,
+    hashable
 
   hs-source-dirs:
     lib
 
   exposed-modules:
     Communication
+    Communication.Message
