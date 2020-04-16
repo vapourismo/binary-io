@@ -7,9 +7,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DerivingStrategies #-}
 
-module Communication.Message 
+module Communication.Message
   ( Message
   , toMessage
   , fromMessage
@@ -18,7 +17,7 @@ where
 
 import GHC.Generics (Generic)
 
-import qualified Control.Monad.Error.Class as Error
+import qualified Control.Monad.Catch as Catch
 import           Control.Monad (when)
 
 import qualified Data.ByteString.Lazy as ByteString
@@ -35,11 +34,10 @@ data Message = Message
   { messageType :: !Reflection.SomeTypeRep
   , messageBody :: ByteString.ByteString
   }
-  deriving stock (Eq, Ord, Generic)
-  deriving anyclass (Hashable.Hashable, Binary.Binary)
+  deriving (Eq, Ord, Generic, Hashable.Hashable, Binary.Binary)
 
 -- | Pack a message manually using a given message type and an encode operation.
-toMessageWith 
+toMessageWith
   :: Reflection.SomeTypeRep -- ^ Message type
   -> Binary.Put -- ^ Encode operation
   -> Message
@@ -49,8 +47,8 @@ toMessageWith typeRep put = Message
   }
 
 -- | Pack a message.
-toMessage 
-  :: (Reflection.Typeable a, Binary.Binary a) 
+toMessage
+  :: (Reflection.Typeable a, Binary.Binary a)
   => a -- ^ Value to pack into the message
   -> Message
 toMessage value = toMessageWith (Typeable.typeOf value) (Binary.put value)
@@ -71,9 +69,10 @@ data MessageError
     , messageErrorMessage :: String
       -- ^ Error message
     }
+  deriving (Show, Catch.Exception)
 
 -- | Do something with the message type in form of a 'Reflection.TypeRep'.
-withMessageType 
+withMessageType
   :: Message -- ^ Contains the message type
   -> (forall k (a :: k). Reflection.TypeRep a -> b) -- ^ Operation to perform on the message type
   -> b
@@ -82,32 +81,32 @@ withMessageType message f =
     Reflection.SomeTypeRep typeRep -> f typeRep
 
 -- | Ensure that message type and target type are the same.
-verifyMessageType 
-  :: Error.MonadError MessageError m 
+verifyMessageType
+  :: Catch.MonadThrow m
   => Message -- ^ Contains the message type
   -> Reflection.TypeRep a -- ^ Target type
   -> m ()
-verifyMessageType message targetTypeRep = 
-  withMessageType message $ \sourceTypeRep -> 
+verifyMessageType message targetTypeRep =
+  withMessageType message $ \sourceTypeRep ->
     when (isNothing (Reflection.eqTypeRep sourceTypeRep targetTypeRep)) $
-      Error.throwError MessageTypeMismatch
+      Catch.throwM MessageTypeMismatch
         { messageErrorSourceType = Reflection.SomeTypeRep sourceTypeRep
         , messageErrorTargetType = Reflection.SomeTypeRep targetTypeRep
         }
 
 -- | Decode the message body using the given 'Binary.Get'. This will not perform any type checking.
 decodeMessage
-  :: Error.MonadError MessageError m
+  :: Catch.MonadThrow m
   => Message -- ^ Contains the message body
   -> Binary.Get a
   -> m a
 decodeMessage message getter = do
   case Binary.Get.runGetOrFail getter (messageBody message) of
-    Right (_, _, result) -> 
+    Right (_, _, result) ->
       pure result
 
     Left (remainingBody, offset, errorMessage) ->
-      Error.throwError MessageGetError
+      Catch.throwM MessageGetError
         { messageErrorBodyRemaining = remainingBody
         , messageErrorBodyOffset = offset
         , messageErrorMessage = errorMessage
@@ -116,7 +115,7 @@ decodeMessage message getter = do
 -- | Unpack a message.
 fromMessage
   :: forall a m
-  .  (Reflection.Typeable a, Binary.Binary a, Error.MonadError MessageError m)
+  .  (Reflection.Typeable a, Binary.Binary a, Catch.MonadThrow m)
   => Message -- ^ Message containing the value to unpack
   -> m a
 fromMessage message = do
