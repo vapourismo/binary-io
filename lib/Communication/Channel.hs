@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module Communication.Channel
   ( ReaderError (..)
@@ -10,6 +11,7 @@ module Communication.Channel
   , newWriter
   , Channel
   , newChannel
+  , newPipe
   , CanGet (..)
   , read
   , CanPut (..)
@@ -19,7 +21,7 @@ where
 
 import Prelude hiding (read)
 
-import qualified Control.Monad.Error.Class as Error
+import qualified Control.Monad.Catch as Catch
 import qualified Control.Concurrent.Classy.MVar as MVar
 import qualified Control.Monad.Conc.Class as Conc
 
@@ -31,6 +33,7 @@ import qualified Data.Binary as Binary
 import System.IO (Handle)
 
 import qualified Communication.Stream as Stream
+import qualified Communication.Process as Process
 
 -- | An error that can occur during reading
 data ReaderError = ReaderGetError
@@ -39,6 +42,7 @@ data ReaderError = ReaderGetError
   , readerErrorBodyInput :: ByteString.ByteString
   , readerErrorMessage :: String
   }
+  deriving (Show, Catch.Exception)
 
 -- | Reader that reads from the same position every time
 newtype PositionalReader m = PositionalReader
@@ -46,7 +50,7 @@ newtype PositionalReader m = PositionalReader
 
 -- | Create a new positional reader.
 newPositionalReader
-  :: (Error.MonadError ReaderError m, Stream.MonadByteStream m)
+  :: (Catch.MonadThrow m, Stream.MonadByteStream m)
   => Handle -- ^ Handle that will be read from
   -> m (PositionalReader m)
 newPositionalReader handle = do
@@ -56,7 +60,7 @@ newPositionalReader handle = do
     continue stream = PositionalReader $ \getter ->
       case Binary.Get.runGetOrFail getter stream of
         Left (remainingBody, offset, errorMessage) ->
-          Error.throwError ReaderGetError
+          Catch.throwM ReaderGetError
             { readerErrorBodyRemaining = remainingBody
             , readerErrorBodyOffset = offset
             , readerErrorBodyInput = stream
@@ -72,7 +76,7 @@ newtype Reader m = Reader
 
 -- | Create a new reader.
 newReader
-  :: (Error.MonadError ReaderError m, Stream.MonadByteStream m, Conc.MonadConc m)
+  :: (Catch.MonadThrow m, Stream.MonadByteStream m, Conc.MonadConc m)
   => Handle -- ^ Handle that will be read from
   -> m (Reader m)
 newReader handle = do
@@ -102,11 +106,27 @@ data Channel m = Channel
 
 -- | Create a new channel.
 newChannel
-  :: (Error.MonadError ReaderError m, Stream.MonadByteStream m, Conc.MonadConc m)
+  :: (Catch.MonadThrow m, Stream.MonadByteStream m, Conc.MonadConc m)
   => Handle -- ^ Handle that will be read from and written to
   -> m (Channel m)
 newChannel handle =
   Channel (newWriter handle) <$> newReader handle
+
+-- | Create a new pipe. It can be used to for interprocess communication.
+newPipe
+  :: ( Catch.MonadThrow m
+     , Stream.MonadByteStream m
+     , Conc.MonadConc m
+     , Process.MonadProcess m
+     )
+  => m (Channel m)
+newPipe = do
+  (readHandle, writeHandle) <- Process.createPipe
+  reader <- newReader readHandle
+  pure Channel
+    { channelWriter = newWriter writeHandle
+    , channelReader = reader
+    }
 
 -- | @r@ can execute 'Binary.Get' operations
 class CanGet r where
@@ -139,7 +159,7 @@ read
   :: (CanGet r, Binary.Binary a)
   => r m -- ^ Read source
   -> m a
-read reader = 
+read reader =
   runGet reader Binary.get
 
 -- | Write something to @w@.
@@ -148,5 +168,5 @@ write
   => w m -- ^ Write target
   -> a -- ^ Value to be written
   -> m ()
-write writer value = 
+write writer value =
   runPut writer (Binary.put value)
