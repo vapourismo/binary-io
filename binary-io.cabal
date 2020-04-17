@@ -33,6 +33,9 @@ license:
 license-file:
   LICENSE
 
+extra-source-files:
+  ChangeLog.md
+
 build-type:
   Simple
 
