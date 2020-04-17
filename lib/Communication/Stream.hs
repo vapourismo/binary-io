@@ -1,31 +1,27 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Communication.Stream 
-  ( MonadByteStream (..)
+module Communication.Stream
+  ( streamBytes
+  , writeBytesAtomically
   )
 where
-
-import Control.Monad.Trans.Class (MonadTrans (lift))
 
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.ByteString as ByteString
 
 import System.IO (Handle)
 
-class MonadByteStream m where
-  -- | Read everything from the handle as a lazy stream of bytes.
-  streamBytes :: Handle -> m ByteString.Lazy.ByteString
+-- | Stream contents of the handle into a lazy byte string.
+streamBytes
+  :: Handle -- ^ Handle to read from
+  -> IO ByteString.Lazy.ByteString
+streamBytes =
+  ByteString.Lazy.hGetContents
 
-  -- | Write all the bytes at once.
-  writeBytesAtomically :: Handle -> ByteString.Lazy.ByteString -> m ()
-
-instance MonadByteStream IO where
-  streamBytes = ByteString.Lazy.hGetContents
-
-  writeBytesAtomically handle payload = ByteString.hPut handle (ByteString.Lazy.toStrict payload)
-
--- | Automatically lifts 'MonadByteStream' through monad transformers
-instance {-# OVERLAPPABLE #-} (MonadTrans t, MonadByteStream m, Monad m) => MonadByteStream (t m) where
-  streamBytes handle = lift (streamBytes handle)
-
-  writeBytesAtomically handle payload = lift (writeBytesAtomically handle payload)
+-- | Write contents of the given lazy byte string all at once.
+writeBytesAtomically
+  :: Handle -- ^ Handle to write to
+  -> ByteString.Lazy.ByteString -- ^ Bytes to be written
+  -> IO ()
+writeBytesAtomically handle payload =
+  ByteString.hPut handle (ByteString.Lazy.toStrict payload)
