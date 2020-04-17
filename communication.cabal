@@ -28,7 +28,8 @@ library
     transformers,
     hashable,
     concurrency,
-    exceptions
+    exceptions,
+    deepseq
 
   hs-source-dirs:
     lib

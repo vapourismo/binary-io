@@ -1,123 +1,67 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
 
 module Communication.Message
-  ( Message
-  , toMessage
-  , fromMessage
-  )
+  ( Message (..) )
 where
 
-import GHC.Generics (Generic)
-
-import qualified Control.Monad.Catch as Catch
+import qualified Control.Monad.Fail as Fail
 import           Control.Monad (when)
+import           Control.DeepSeq (rnf)
 
 import qualified Data.ByteString.Lazy as ByteString
 import qualified Data.Binary as Binary
-import qualified Data.Hashable as Hashable
 import qualified Data.Binary.Get as Binary.Get
 import qualified Data.Binary.Put as Binary.Put
+import qualified Data.Hashable as Hashable
 import qualified Data.Typeable as Typeable
 import           Data.Maybe (isNothing)
+import           Data.Bits (finiteBitSize)
+import           Data.Int (Int64)
 
 import qualified Type.Reflection as Reflection
 
-data Message = Message
-  { messageType :: !Reflection.SomeTypeRep
-  , messageBody :: ByteString.ByteString
-  }
-  deriving (Eq, Ord, Generic, Hashable.Hashable, Binary.Binary)
+-- | Will evaluate to bottom if 'Int' and 'Int64' don't have the same upper bound or have a
+-- different bit size.
+int64IntConsistency :: ()
+int64IntConsistency = rnf
+  [ assert (fromIntegral @Int @Int64 maxBound == maxBound) ""
+  , assert (fromIntegral @Int64 @Int maxBound == maxBound) ""
+  , assert (finiteBitSize @Int maxBound == finiteBitSize @Int64 maxBound) ""
+  ]
+  where
+    assert False message = error message
+    assert True  _       = ()
 
--- | Pack a message manually using a given message type and an encode operation.
-toMessageWith
-  :: Reflection.SomeTypeRep -- ^ Message type
-  -> Binary.Put -- ^ Encode operation
-  -> Message
-toMessageWith typeRep put = Message
-  { messageType = typeRep
-  , messageBody = Binary.Put.runPut put
-  }
+-- | Wrapper for @a@ that makes decoding a little safer
+--
+-- The 'Binary.Binary' instance will make sure that decoding only succeeds if the
+-- message-to-be-decoded was also encoded using the same type.
+--
+-- Additionally, it will restrict 'Get' operations that would otherwise consume an entire stream
+-- only operate on the payload that was actually encoded.
+--
+newtype Message a = Message
+  { messageBody :: a }
+  deriving (Show, Eq, Ord, Hashable.Hashable)
 
--- | Pack a message.
-toMessage
-  :: (Reflection.Typeable a, Binary.Binary a)
-  => a -- ^ Value to pack into the message
-  -> Message
-toMessage value = toMessageWith (Typeable.typeOf value) (Binary.put value)
+instance (Typeable.Typeable a, Binary.Binary a) => Binary.Binary (Message a) where
+  put (Message body) = do
+    Binary.put (Typeable.typeOf body)
 
--- | An error that can occur while unpacking a message.
-data MessageError
-  = MessageTypeMismatch
-    { messageErrorSourceType :: Reflection.SomeTypeRep
-      -- ^ Type in the 'Message'
-    , messageErrorTargetType :: Reflection.SomeTypeRep
-      -- ^ Target type
-    }
-  | MessageGetError
-    { messageErrorBodyRemaining :: ByteString.ByteString
-      -- ^ Remaining body that wasn't parsed
-    , messageErrorBodyOffset :: Binary.Get.ByteOffset
-      -- ^ Offset into the body at which the error occured
-    , messageErrorMessage :: String
-      -- ^ Error message
-    }
-  deriving (Show, Catch.Exception)
+    let payload = Binary.Put.runPut (Binary.put body)
+    Binary.Put.putInt64le (ByteString.length payload)
+    Binary.Put.putLazyByteString payload
 
--- | Do something with the message type in form of a 'Reflection.TypeRep'.
-withMessageType
-  :: Message -- ^ Contains the message type
-  -> (forall k (a :: k). Reflection.TypeRep a -> b) -- ^ Operation to perform on the message type
-  -> b
-withMessageType message f =
-  case messageType message of
-    Reflection.SomeTypeRep typeRep -> f typeRep
+  get = seq int64IntConsistency $ do
+    let targetTypeRep = Reflection.typeRep @a
+    Reflection.SomeTypeRep sourceTypeRep <- Binary.get
 
--- | Ensure that message type and target type are the same.
-verifyMessageType
-  :: Catch.MonadThrow m
-  => Message -- ^ Contains the message type
-  -> Reflection.TypeRep a -- ^ Target type
-  -> m ()
-verifyMessageType message targetTypeRep =
-  withMessageType message $ \sourceTypeRep ->
     when (isNothing (Reflection.eqTypeRep sourceTypeRep targetTypeRep)) $
-      Catch.throwM MessageTypeMismatch
-        { messageErrorSourceType = Reflection.SomeTypeRep sourceTypeRep
-        , messageErrorTargetType = Reflection.SomeTypeRep targetTypeRep
-        }
+      Fail.fail ("Expected type " <> show targetTypeRep <> ", got " <> show sourceTypeRep)
 
--- | Decode the message body using the given 'Binary.Get'. This will not perform any type checking.
-decodeMessage
-  :: Catch.MonadThrow m
-  => Message -- ^ Contains the message body
-  -> Binary.Get a
-  -> m a
-decodeMessage message getter = do
-  case Binary.Get.runGetOrFail getter (messageBody message) of
-    Right (_, _, result) ->
-      pure result
-
-    Left (remainingBody, offset, errorMessage) ->
-      Catch.throwM MessageGetError
-        { messageErrorBodyRemaining = remainingBody
-        , messageErrorBodyOffset = offset
-        , messageErrorMessage = errorMessage
-        }
-
--- | Unpack a message.
-fromMessage
-  :: forall a m
-  .  (Reflection.Typeable a, Binary.Binary a, Catch.MonadThrow m)
-  => Message -- ^ Message containing the value to unpack
-  -> m a
-fromMessage message = do
-  verifyMessageType message (Reflection.typeRep @a)
-  decodeMessage message Binary.get
+    length <- Binary.Get.getInt64le
+    Message <$> Binary.Get.isolate (fromIntegral length) Binary.get
