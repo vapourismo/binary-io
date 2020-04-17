@@ -43,10 +43,10 @@ import System.IO (Handle)
 
 -- | An error that can occur during reading
 data ReaderError = ReaderGetError
-  { readerErrorBodyRemaining :: ByteString.ByteString
-  , readerErrorBodyOffset :: Binary.Get.ByteOffset
-  , readerErrorBodyInput :: ByteString.ByteString
-  , readerErrorMessage :: String
+  { readerErrorBodyRemaining :: !ByteString.ByteString
+  , readerErrorBodyOffset :: !Binary.Get.ByteOffset
+  , readerErrorBodyInput :: !ByteString.ByteString
+  , readerErrorMessage :: !String
   }
   deriving (Show, Exception.Exception)
 
@@ -107,8 +107,8 @@ newWriter handle = Writer $ \putter ->
 
 -- | Pair of 'Reader' and 'Writer'
 data Channel = Channel
-  { channelWriter :: Writer
-  , channelReader :: Reader
+  { channelWriter :: !Writer
+  , channelReader :: !Reader
   }
 
 -- | Create a new channel.
