@@ -1,4 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveAnyClass #-}
@@ -110,44 +112,44 @@ newChannel
 newChannel handle =
   Channel (newWriter handle) <$> newReader handle
 
--- | @r@ can execute 'Binary.Get' operations
-class CanGet r where
+-- | @r@ can execute 'Binary.Get' operations in @m@
+class CanGet r m where
   runGet
-    :: r m -- ^ Reader / source
+    :: r -- ^ Reader / source
     -> Binary.Get a -- ^ Operation to execute
     -> m a
 
-instance CanGet Reader where
+instance CanGet (Reader m) m where
   runGet = runReader
 
-instance CanGet Channel where
+instance CanGet (Channel m) m where
   runGet = runGet . channelReader
 
--- | @w@ can execute 'Binary.Put' operations
-class CanPut w where
+-- | @w@ can execute 'Binary.Put' operations in @m@
+class CanPut w m where
   runPut
-    :: w m -- ^ Writer / target
+    :: w -- ^ Writer / target
     -> Binary.Put -- ^ Operation to execute
     -> m ()
 
-instance CanPut Writer where
+instance CanPut (Writer m) m where
   runPut = runWriter
 
-instance CanPut Channel where
+instance CanPut (Channel m) m where
   runPut = runPut . channelWriter
 
 -- | Read something from @r@.
 read
-  :: (CanGet r, Binary.Binary a)
-  => r m -- ^ Read source
+  :: (CanGet r m, Binary.Binary a)
+  => r -- ^ Read source
   -> m a
 read reader =
   runGet reader Binary.get
 
 -- | Write something to @w@.
 write
-  :: (CanPut w, Binary.Binary a)
-  => w m -- ^ Write target
+  :: (CanPut w m, Binary.Binary a)
+  => w -- ^ Write target
   -> a -- ^ Value to be written
   -> m ()
 write writer value =
