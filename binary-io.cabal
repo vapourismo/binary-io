@@ -2,10 +2,10 @@ cabal-version:
   >= 1.10
 
 name:
-  communication
+  binary-io
 
 version:
-  0
+  1.0.0
 
 author:
   Ole
@@ -24,13 +24,10 @@ library
     base,
     bytestring,
     binary,
-    hashable,
     deepseq
 
   hs-source-dirs:
     lib
 
   exposed-modules:
-    Communication
-    Communication.Message
-    Communication.Stream
+    Data.Binary.IO

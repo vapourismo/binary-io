@@ -5,24 +5,26 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module Communication.Stream
-  ( ReaderError (..)
+-- | Read and write values of types that implement 'Binary.Binary' from and to 'Handle's
+module Data.Binary.IO
+  ( -- * Readers
+    ReaderError (..)
+
   , Reader
   , newReader
 
+    -- * Writers
   , Writer
   , newWriter
 
-  , Channel
-  , newChannel
+    -- * Duplex
+  , Duplex
+  , newDuplex
 
   , CanGet (..)
   , read
   , CanPut (..)
   , write
-
-  , streamBytes
-  , writeBytesAtomically
   )
 where
 
@@ -42,97 +44,134 @@ import System.IO (Handle)
 -- * Reader
 
 -- | An error that can occur during reading
-data ReaderError = ReaderGetError
-  { readerErrorBodyRemaining :: !ByteString.ByteString
-  , readerErrorBodyOffset :: !Binary.Get.ByteOffset
-  , readerErrorBodyInput :: !ByteString.ByteString
+--
+-- @since 1.0.0
+data ReaderError = ReaderGetError -- ^ Error from the 'Binary.Get' operation
+  { readerErrorRemaining :: !ByteString.ByteString
+  -- ^ Unconsumed part of the byte stream
+  --
+  -- @since 1.0.0
+
+  , readerErrorOffset :: !Binary.Get.ByteOffset
+  -- ^ Error location represented as an offset into the input
+  --
+  -- @since 1.0.0
+
+  , readerErrorInput :: !ByteString.ByteString
+  -- ^ Input to the 'Binary.Get' operation
+  --
+  -- @since 1.0.0
+
   , readerErrorMessage :: !String
+  -- ^ Error message
+  --
+  -- @since 1.0.0
   }
   deriving (Show, Exception.Exception)
 
--- | Reader that reads from the same position every time
-newtype PositionalReader = PositionalReader
-  { runPositionalReader :: forall a. Binary.Get.Get a -> IO (PositionalReader, a) }
+newtype StationaryReader = StationaryReader
+  { runStationaryReader :: forall a. Binary.Get.Get a -> IO (StationaryReader, a) }
 
--- | Create a new positional reader.
+-- | Create a new stationary reader that will read from the same position in the stream every time.
+-- However, it will return a new StationaryReader which can be used to consume the rest of the
+-- stream.
 --
--- Reading using resulting 'PositionalReader' may throw a 'ReaderError'.
+-- Reading using the resulting StationaryReader may throw a 'ReaderError'.
 --
-newPositionalReader
+-- Other threads reading from the same 'Handle' will interfere with read operations of the
+-- StationaryReader.
+newStationaryReader
   :: Handle -- ^ Handle that will be read from
-  -> IO PositionalReader
-newPositionalReader handle = do
-  stream <- streamBytes handle
+  -> IO StationaryReader
+newStationaryReader handle = do
+  stream <- ByteString.hGetContents handle
   pure (continue stream)
   where
-    continue stream = PositionalReader $ \getter -> do
+    continue stream = StationaryReader $ \getter -> do
       -- Evaluate the result of 'runGetOrFail' to WHNF. This should be enough because it means that
       -- the parser has decided between 'Left' and 'Right'.
       result <- Exception.evaluate (Binary.Get.runGetOrFail getter stream)
       case result of
         Left (remainingBody, offset, errorMessage) ->
           Exception.throw ReaderGetError
-            { readerErrorBodyRemaining = remainingBody
-            , readerErrorBodyOffset = offset
-            , readerErrorBodyInput = stream
+            { readerErrorRemaining = remainingBody
+            , readerErrorOffset = offset
+            , readerErrorInput = stream
             , readerErrorMessage = errorMessage
             }
 
         Right (tailStream, _, value) ->
           pure (continue tailStream, value)
 
--- | Normal reader - will advance the reading position on each successful read
+-- | @since 1.0.0
 newtype Reader = Reader
   { runReader :: forall a. Binary.Get a -> IO a }
 
 -- | Create a new reader.
 --
--- The resulting 'Reader' may throw 'ReaderError' when used.
+-- Reading using the 'Reader' may throw 'ReaderError'.
 --
 -- The internal position of the 'Reader' is not advanced when it throws an exception during reading.
--- This has the consequence that if you're trying to read the same
+-- This has the consequence that if you're trying to read the same faulty 'Binary.Get' operation
+-- multiple times, you will always receive an exception.
 --
+-- Other threads reading from the 'Handle' will interfere with read operations of the 'Reader'.
+-- However, the 'Reader' itself is thread-safe and can be utilized in concurrently.
+--
+-- @since 1.0.0
 newReader
   :: Handle -- ^ Handle that will be read from
   -> IO Reader
 newReader handle = do
-  posReader <- newPositionalReader handle
+  posReader <- newStationaryReader handle
   readerVar <- MVar.newMVar posReader
   pure $ Reader $ \getter ->
     MVar.modifyMVar readerVar $ \posReader ->
-      runPositionalReader posReader getter
+      runStationaryReader posReader getter
 
 -- * Writer
 
--- | Normal writer
+-- | @since 1.0.0
 newtype Writer = Writer
   { runWriter :: Binary.Put -> IO () }
 
 -- | Create a writer.
+--
+-- Other threads writing to the same 'Handle' do not interfere with the resulting 'Writer'. The
+-- 'Writer' may be used concurrently.
+--
+-- @since 1.0.0
 newWriter
   :: Handle -- ^ Handle that will be written to
   -> Writer
 newWriter handle = Writer $ \putter ->
   writeBytesAtomically handle (Binary.Put.runPut putter)
 
--- * Channel
+-- * Duplex
 
 -- | Pair of 'Reader' and 'Writer'
-data Channel = Channel
-  { channelWriter :: !Writer
-  , channelReader :: !Reader
+--
+-- @since 1.0.0
+data Duplex = Duplex
+  { duplexWriter :: !Writer
+  , duplexReader :: !Reader
   }
 
--- | Create a new channel.
-newChannel
+-- | Create a new duplex. The 'Duplex' inherits all the properties of 'Reader' and 'Writer' when
+-- created with 'newReader' and 'newWriter'.
+--
+-- @since 1.0.0
+newDuplex
   :: Handle -- ^ Handle that will be read from and written to
-  -> IO Channel
-newChannel handle =
-  Channel (newWriter handle) <$> newReader handle
+  -> IO Duplex
+newDuplex handle =
+  Duplex (newWriter handle) <$> newReader handle
 
 -- * Classes
 
--- | @r@ can execute 'Binary.Get' operations in @m@
+-- | @r@ can execute 'Binary.Get' operations
+--
+-- @since 1.0.0
 class CanGet r where
   runGet
     :: r -- ^ Reader / source
@@ -142,10 +181,12 @@ class CanGet r where
 instance CanGet Reader where
   runGet = runReader
 
-instance CanGet Channel where
-  runGet = runGet . channelReader
+instance CanGet Duplex where
+  runGet = runGet . duplexReader
 
--- | @w@ can execute 'Binary.Put' operations in @m@
+-- | @w@ can execute 'Binary.Put' operations
+--
+-- @since 1.0.0
 class CanPut w where
   runPut
     :: w -- ^ Writer / target
@@ -155,10 +196,12 @@ class CanPut w where
 instance CanPut Writer where
   runPut = runWriter
 
-instance CanPut Channel where
-  runPut = runPut . channelWriter
+instance CanPut Duplex where
+  runPut = runPut . duplexWriter
 
 -- | Read something from @r@.
+--
+-- @since 1.0.0
 read
   :: (CanGet r, Binary.Binary a)
   => r -- ^ Read source
@@ -167,6 +210,8 @@ read reader =
   runGet reader Binary.get
 
 -- | Write something to @w@.
+--
+-- @since 1.0.0
 write
   :: (CanPut w, Binary.Binary a)
   => w -- ^ Write target
@@ -176,13 +221,6 @@ write writer value =
   runPut writer (Binary.put value)
 
 -- * Utilities
-
--- | Stream contents of the handle into a lazy byte string.
-streamBytes
-  :: Handle -- ^ Handle to read from
-  -> IO ByteString.ByteString
-streamBytes =
-  ByteString.hGetContents
 
 -- | Write contents of the given lazy byte string all at once.
 writeBytesAtomically
