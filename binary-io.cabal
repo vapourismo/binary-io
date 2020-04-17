@@ -7,23 +7,50 @@ name:
 version:
   1.0.0
 
+category:
+  Data, Parsing, IO
+
+synopsis:
+  Read and write values of types that implement Binary from and to Handles
+
+description:
+  Read and write values of types that implement Binary from and to Handles
+  .
+  See module "Data.Binary.IO".
+
 author:
-  Ole
+  Ole Krüger <haskell-binary-io@vprsm.de>
+
+maintainer:
+  Ole Krüger <haskell-binary-io@vprsm.de>
+
+homepage:
+  https://github.com/vapourismo/binary-io
+
+license:
+  BSD3
+
+license-file:
+  LICENSE
 
 build-type:
   Simple
+
+source-repository head
+  type: git
+  location: git://github.com/vapourismo/binary-io.git
 
 library
   default-language:
     Haskell2010
 
   ghc-options:
-    -Wall -Wno-name-shadowing
+    -Wall -Wextra -Wno-name-shadowing
 
   build-depends:
-    base,
+    base == 4.*,
     bytestring,
-    binary
+    binary >= 0.7.2
 
   hs-source-dirs:
     lib
