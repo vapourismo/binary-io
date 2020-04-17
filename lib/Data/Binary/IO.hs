@@ -193,6 +193,9 @@ class CanPut w where
     -> Binary.Put -- ^ Operation to execute
     -> IO ()
 
+instance CanPut Handle where
+  runPut handle putter = writeBytesAtomically handle (Binary.Put.runPut putter)
+
 instance CanPut Writer where
   runPut = runWriter
 
