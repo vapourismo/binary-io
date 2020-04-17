@@ -55,6 +55,9 @@ newtype PositionalReader = PositionalReader
   { runPositionalReader :: forall a. Binary.Get.Get a -> IO (PositionalReader, a) }
 
 -- | Create a new positional reader.
+--
+-- Reading using resulting 'PositionalReader' may throw a 'ReaderError'.
+--
 newPositionalReader
   :: Handle -- ^ Handle that will be read from
   -> IO PositionalReader
@@ -62,8 +65,11 @@ newPositionalReader handle = do
   stream <- streamBytes handle
   pure (continue stream)
   where
-    continue stream = PositionalReader $ \getter ->
-      case Binary.Get.runGetOrFail getter stream of
+    continue stream = PositionalReader $ \getter -> do
+      -- Evaluate the result of 'runGetOrFail' to WHNF. This should be enough because it means that
+      -- the parser has decided between 'Left' and 'Right'.
+      result <- Exception.evaluate (Binary.Get.runGetOrFail getter stream)
+      case result of
         Left (remainingBody, offset, errorMessage) ->
           Exception.throw ReaderGetError
             { readerErrorBodyRemaining = remainingBody
@@ -80,6 +86,12 @@ newtype Reader = Reader
   { runReader :: forall a. Binary.Get a -> IO a }
 
 -- | Create a new reader.
+--
+-- The resulting 'Reader' may throw 'ReaderError' when used.
+--
+-- The internal position of the 'Reader' is not advanced when it throws an exception during reading.
+-- This has the consequence that if you're trying to read the same
+--
 newReader
   :: Handle -- ^ Handle that will be read from
   -> IO Reader
