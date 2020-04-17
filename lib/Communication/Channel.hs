@@ -24,7 +24,6 @@ import Prelude hiding (read)
 
 import qualified Control.Monad.Catch as Catch
 import qualified Control.Concurrent.Classy.MVar as MVar
-import qualified Control.Monad.Conc.Class as Conc
 
 import qualified Data.ByteString.Lazy as ByteString
 import qualified Data.Binary.Get as Binary.Get
@@ -45,14 +44,13 @@ data ReaderError = ReaderGetError
   deriving (Show, Catch.Exception)
 
 -- | Reader that reads from the same position every time
-newtype PositionalReader m = PositionalReader
-  { runPositionalReader :: forall a. Binary.Get.Get a -> m (PositionalReader m, a) }
+newtype PositionalReader = PositionalReader
+  { runPositionalReader :: forall a. Binary.Get.Get a -> IO (PositionalReader, a) }
 
 -- | Create a new positional reader.
 newPositionalReader
-  :: (Catch.MonadThrow m, Stream.MonadByteStream m)
-  => Handle -- ^ Handle that will be read from
-  -> m (PositionalReader m)
+  :: Handle -- ^ Handle that will be read from
+  -> IO PositionalReader
 newPositionalReader handle = do
   stream <- Stream.streamBytes handle
   pure (continue stream)
@@ -71,14 +69,13 @@ newPositionalReader handle = do
           pure (continue tailStream, value)
 
 -- | Normal reader - will advance the reading position on each successful read
-newtype Reader m = Reader
-  { runReader :: forall a. Binary.Get a -> m a }
+newtype Reader = Reader
+  { runReader :: forall a. Binary.Get a -> IO a }
 
 -- | Create a new reader.
 newReader
-  :: (Catch.MonadThrow m, Stream.MonadByteStream m, Conc.MonadConc m)
-  => Handle -- ^ Handle that will be read from
-  -> m (Reader m)
+  :: Handle -- ^ Handle that will be read from
+  -> IO Reader
 newReader handle = do
   posReader <- newPositionalReader handle
   readerVar <- MVar.newMVar posReader
@@ -87,70 +84,70 @@ newReader handle = do
       runPositionalReader posReader getter
 
 -- | Normal writer
-newtype Writer m = Writer
-  { runWriter :: Binary.Put -> m () }
+newtype Writer = Writer
+  { runWriter :: Binary.Put -> IO () }
 
 -- | Create a writer.
 newWriter
-  :: Stream.MonadByteStream m
-  => Handle -- ^ Handle that will be written to
-  -> Writer m
+  :: Handle -- ^ Handle that will be written to
+  -> Writer
 newWriter handle = Writer $ \putter ->
   Stream.writeBytesAtomically handle (Binary.Put.runPut putter)
 
 -- | Pair of 'Reader' and 'Writer'
-data Channel m = Channel
-  { channelWriter :: Writer m
-  , channelReader :: Reader m
+data Channel = Channel
+  { channelWriter :: Writer
+  , channelReader :: Reader
   }
 
 -- | Create a new channel.
 newChannel
-  :: (Catch.MonadThrow m, Stream.MonadByteStream m, Conc.MonadConc m)
-  => Handle -- ^ Handle that will be read from and written to
-  -> m (Channel m)
+  :: Handle -- ^ Handle that will be read from and written to
+  -> IO Channel
 newChannel handle =
   Channel (newWriter handle) <$> newReader handle
 
+-- * Classes
+
 -- | @r@ can execute 'Binary.Get' operations in @m@
-class CanGet r m where
+class CanGet r where
   runGet
     :: r -- ^ Reader / source
     -> Binary.Get a -- ^ Operation to execute
-    -> m a
+    -> IO a
 
-instance CanGet (Reader m) m where
+instance CanGet Reader where
   runGet = runReader
 
-instance CanGet (Channel m) m where
+instance CanGet Channel where
   runGet = runGet . channelReader
 
 -- | @w@ can execute 'Binary.Put' operations in @m@
-class CanPut w m where
+class CanPut w where
   runPut
     :: w -- ^ Writer / target
     -> Binary.Put -- ^ Operation to execute
-    -> m ()
+    -> IO ()
 
-instance CanPut (Writer m) m where
+instance CanPut Writer where
   runPut = runWriter
 
-instance CanPut (Channel m) m where
+instance CanPut Channel where
   runPut = runPut . channelWriter
 
 -- | Read something from @r@.
 read
-  :: (CanGet r m, Binary.Binary a)
+  :: (CanGet r, Binary.Binary a)
   => r -- ^ Read source
-  -> m a
+  -> IO a
 read reader =
   runGet reader Binary.get
 
 -- | Write something to @w@.
 write
-  :: (CanPut w m, Binary.Binary a)
+  :: (CanPut w, Binary.Binary a)
   => w -- ^ Write target
   -> a -- ^ Value to be written
-  -> m ()
+  -> IO ()
 write writer value =
   runPut writer (Binary.put value)
