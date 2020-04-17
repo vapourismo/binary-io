@@ -37,5 +37,4 @@ library
   exposed-modules:
     Communication
     Communication.Message
-    Communication.Channel
     Communication.Stream
