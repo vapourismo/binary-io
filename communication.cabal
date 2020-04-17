@@ -24,11 +24,7 @@ library
     base,
     bytestring,
     binary,
-    mtl,
-    transformers,
     hashable,
-    concurrency,
-    exceptions,
     deepseq
 
   hs-source-dirs:

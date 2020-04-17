@@ -28,8 +28,8 @@ where
 
 import Prelude hiding (read)
 
-import qualified Control.Monad.Catch as Catch
-import qualified Control.Concurrent.Classy.MVar as MVar
+import qualified Control.Exception as Exception
+import qualified Control.Concurrent.MVar as MVar
 
 import qualified Data.ByteString.Lazy as ByteString
 import qualified Data.ByteString as ByteString.Strict
@@ -48,7 +48,7 @@ data ReaderError = ReaderGetError
   , readerErrorBodyInput :: ByteString.ByteString
   , readerErrorMessage :: String
   }
-  deriving (Show, Catch.Exception)
+  deriving (Show, Exception.Exception)
 
 -- | Reader that reads from the same position every time
 newtype PositionalReader = PositionalReader
@@ -65,7 +65,7 @@ newPositionalReader handle = do
     continue stream = PositionalReader $ \getter ->
       case Binary.Get.runGetOrFail getter stream of
         Left (remainingBody, offset, errorMessage) ->
-          Catch.throwM ReaderGetError
+          Exception.throw ReaderGetError
             { readerErrorBodyRemaining = remainingBody
             , readerErrorBodyOffset = offset
             , readerErrorBodyInput = stream
