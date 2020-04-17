@@ -21,6 +21,8 @@ module Data.Binary.IO
   , Duplex
   , newDuplex
 
+    -- * Classes
+
   , CanGet (..)
   , read
   , CanPut (..)
