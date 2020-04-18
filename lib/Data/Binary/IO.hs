@@ -42,7 +42,7 @@ import qualified Data.Binary.Get as Binary.Get
 import qualified Data.Binary.Put as Binary.Put
 import qualified Data.Binary as Binary
 
-import System.IO (Handle)
+import System.IO (Handle, hSetBinaryMode)
 
 -- * Reader
 
@@ -77,6 +77,7 @@ newtype StationaryReader = StationaryReader
 
 newStationaryReader :: Handle -> IO StationaryReader
 newStationaryReader handle = do
+  hSetBinaryMode handle True
   stream <- ByteString.hGetContents handle
   pure (continue stream)
   where
@@ -112,6 +113,8 @@ newtype Reader = Reader
 -- However, the 'Reader' itself is thread-safe and can be utilized concurrently.
 --
 -- Once the 'Handle' reaches EOF, it will be closed.
+--
+-- The given 'Handle' will be swiched to binary mode via 'hSetBinaryMode'.
 --
 -- @since 1.0.0
 newReader
