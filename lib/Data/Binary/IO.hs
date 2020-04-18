@@ -1,8 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
 -- | Read and write values of types that implement 'Binary.Binary' from and to 'Handle's
@@ -72,34 +67,38 @@ data ReaderError = ReaderGetError -- ^ Error from the 'Binary.Get' operation
   }
   deriving (Show, Exception.Exception)
 
-newtype StationaryReader = StationaryReader
-  { runStationaryReader :: forall a. Binary.Get.Get a -> IO (StationaryReader, a) }
+newtype StationaryReader = StationaryReader ByteString.ByteString
+
+runStationaryReader :: StationaryReader -> Binary.Get.Get a -> IO (StationaryReader, a)
+runStationaryReader (StationaryReader stream) getter =  do
+  -- Evaluate the result of 'runGetOrFail' to WHNF. This should be enough because it means that
+  -- the parser has decided between 'Left' and 'Right'.
+  result <- Exception.evaluate (Binary.Get.runGetOrFail getter stream)
+  case result of
+    Left (remainingBody, offset, errorMessage) ->
+      Exception.throw ReaderGetError
+        { readerErrorRemaining = remainingBody
+        , readerErrorOffset = offset
+        , readerErrorInput = stream
+        , readerErrorMessage = errorMessage
+        }
+
+    Right (tailStream, _, value) ->
+      pure (StationaryReader tailStream, value)
 
 newStationaryReader :: Handle -> IO StationaryReader
 newStationaryReader handle = do
   hSetBinaryMode handle True
-  stream <- ByteString.hGetContents handle
-  pure (continue stream)
-  where
-    continue stream = StationaryReader $ \getter -> do
-      -- Evaluate the result of 'runGetOrFail' to WHNF. This should be enough because it means that
-      -- the parser has decided between 'Left' and 'Right'.
-      result <- Exception.evaluate (Binary.Get.runGetOrFail getter stream)
-      case result of
-        Left (remainingBody, offset, errorMessage) ->
-          Exception.throw ReaderGetError
-            { readerErrorRemaining = remainingBody
-            , readerErrorOffset = offset
-            , readerErrorInput = stream
-            , readerErrorMessage = errorMessage
-            }
-
-        Right (tailStream, _, value) ->
-          pure (continue tailStream, value)
+  StationaryReader <$> ByteString.hGetContents handle
 
 -- | @since 1.0.0
-newtype Reader = Reader
-  { runReader :: forall a b. Binary.Get a -> (a -> IO b) -> IO b }
+newtype Reader = Reader (MVar.MVar StationaryReader)
+
+runReader :: Reader -> Binary.Get a -> (a -> IO b) -> IO b
+runReader (Reader readerVar) getter continue =
+  MVar.modifyMVar readerVar $ \posReader -> do
+    toReturn <- runStationaryReader posReader getter
+    traverse continue toReturn
 
 -- | Create a new reader.
 --
@@ -122,17 +121,16 @@ newReader
   -> IO Reader
 newReader handle = do
   posReader <- newStationaryReader handle
-  readerVar <- MVar.newMVar posReader
-  pure $ Reader $ \getter continue ->
-    MVar.modifyMVar readerVar $ \posReader -> do
-      toReturn <- runStationaryReader posReader getter
-      traverse continue toReturn
+  Reader <$> MVar.newMVar posReader
 
 -- * Writer
 
 -- | @since 1.0.0
-newtype Writer = Writer
-  { runWriter :: Binary.Put -> IO () }
+newtype Writer = Writer Handle
+
+runWriter :: Writer -> Binary.Put -> IO ()
+runWriter (Writer handle) putter =
+  writeBytesAtomically handle (Binary.Put.runPut putter)
 
 -- | Create a writer.
 --
@@ -143,8 +141,7 @@ newtype Writer = Writer
 newWriter
   :: Handle -- ^ Handle that will be written to
   -> Writer
-newWriter handle = Writer $ \putter ->
-  writeBytesAtomically handle (Binary.Put.runPut putter)
+newWriter = Writer
 
 -- * Duplex
 
