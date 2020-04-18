@@ -14,17 +14,17 @@ import Data.Binary.IO
 import Data.Binary (Binary (..))
 import Data.Bifoldable (bitraverse_)
 
-import Test.Hspec (Spec, Expectation, before, describe, it, shouldBe, shouldThrow)
+import qualified Test.Hspec as Hspec
 
-import System.Process (createPipe)
-import System.IO (Handle, BufferMode (NoBuffering), hSetBuffering, hClose, hIsEOF, hIsClosed)
-import System.IO.Error (isIllegalOperation, ioeGetErrorString)
+import           System.Process (createPipe)
+import qualified System.IO as IO
+import           System.IO.Error (isIllegalOperation, ioeGetErrorString)
 
 -- | Create a pipe with no buffering on read and write side.
-createUnbufferedPipe :: IO (Handle, Handle)
+createUnbufferedPipe :: IO (IO.Handle, IO.Handle)
 createUnbufferedPipe = do
   handles <- createPipe
-  join bitraverse_ (`hSetBuffering` NoBuffering) handles
+  join bitraverse_ (`IO.hSetBuffering` IO.NoBuffering) handles
   pure handles
 
 -- | The 'Binary' instance of this type implements a 'get' that always fails
@@ -38,25 +38,25 @@ instance Binary BadGet where
 data ExampleException = ExampleException
   deriving (Show, Exception)
 
--- | Check that a read from the 'Handle' yields the given value.
-shouldRead :: (Show a, Eq a, Binary a) => Reader -> a -> Expectation
+-- | Check that a read from the 'IO.Handle' yields the given value.
+shouldRead :: (Show a, Eq a, Binary a) => Reader -> a -> Hspec.Expectation
 shouldRead reader expectedValue = do
   value <- read reader
-  shouldBe value expectedValue
+  Hspec.shouldBe value expectedValue
 
 -- | Close a handle and verify.
-closeHandle :: Handle -> Expectation
+closeHandle :: IO.Handle -> Hspec.Expectation
 closeHandle handle = do
-  hClose handle
-  closed <- hIsClosed handle
-  shouldBe closed True
+  IO.hClose handle
+  closed <- IO.hIsClosed handle
+  Hspec.shouldBe closed True
 
-spec :: Spec
-spec = before createUnbufferedPipe $ do
-  describe "Reader" $ do
+spec :: Hspec.Spec
+spec = Hspec.before createUnbufferedPipe $ do
+  Hspec.describe "Reader" $ do
     let
       testReads value =
-        it ("reads " <> show (typeOf value)) $ \(handleRead, handleWrite) -> do
+        Hspec.it ("reads " <> show (typeOf value)) $ \(handleRead, handleWrite) -> do
           reader <- liftIO (newReader handleRead)
 
           write handleWrite value
@@ -79,47 +79,49 @@ spec = before createUnbufferedPipe $ do
 
     -- When the read handle has reached its end, reading from it should not throw an error.
     -- However, no more input can be read therefore the underling 'Get' parser should fail.
-    it "throws ReaderGetError when Handle is EOF" $ \(handleRead, handleWrite) -> do
+    Hspec.it "throws ReaderGetError when Handle is EOF" $ \(handleRead, handleWrite) -> do
       reader <- liftIO (newReader handleRead)
 
-      hClose handleWrite
-      eof <- hIsEOF handleRead
-      shouldBe eof True
+      IO.hClose handleWrite
+      eof <- IO.hIsEOF handleRead
+      Hspec.shouldBe eof True
 
-      shouldThrow (read reader :: IO String) (\ReaderGetError{} -> True)
+      Hspec.shouldThrow (read reader :: IO String) (\ReaderGetError{} -> True)
 
     -- Reading from a closed handle should throw. That exception needs to surface.
-    it "throws IllegalOperation when read Handle is closed" $ \(handleRead, _handleWrite) -> do
+    Hspec.it "throws IllegalOperation when read Handle is closed" $ \(handleRead, _handleWrite) -> do
       reader <- liftIO (newReader handleRead)
 
       closeHandle handleRead
 
-      shouldThrow (read reader :: IO String) isIllegalOperation
+      Hspec.shouldThrow (read reader :: IO String) isIllegalOperation
 
     -- Failing 'Get' operations should not advance the stream position.
-    it "preserves the stream position when Get operation fails" $ \(handleRead, handleWrite) -> do
+    Hspec.it "preserves the stream position when Get operation fails" $ \(handleRead, handleWrite) -> do
       reader <- liftIO (newReader handleRead)
 
       write handleWrite "Hello World"
-      shouldThrow (read reader :: IO BadGet) (\ReaderGetError{} -> True)
+      Hspec.shouldThrow (read reader :: IO BadGet) (\ReaderGetError{} -> True)
       "Hello World" <- read reader
 
       pure ()
 
     -- Failing continuations should not advance the stream position.
-    it "preserves the stream position when continuation fails" $ \(handleRead, handleWrite) -> do
+    Hspec.it "preserves the stream position when continuation fails" $ \(handleRead, handleWrite) -> do
       reader <- liftIO (newReader handleRead)
 
       write handleWrite "Hello World"
-      shouldThrow (readWith reader (\() -> throw ExampleException)) (\ExampleException -> True)
+      Hspec.shouldThrow
+        (readWith reader (\() -> throw ExampleException))
+        (\ExampleException -> True)
       "Hello World" <- read reader
 
       pure ()
 
-  describe "Writer" $ do
+  Hspec.describe "Writer" $ do
     let
       testWrites value =
-        it ("writes " <> show (typeOf value)) $ \(handleRead, handleWrite) -> do
+        Hspec.it ("writes " <> show (typeOf value)) $ \(handleRead, handleWrite) -> do
           let writer = newWriter handleWrite
           reader <- newReader handleRead
 
@@ -141,17 +143,17 @@ spec = before createUnbufferedPipe $ do
     -- Test something with variable length
     testWrites "Hello World"
 
-    it "throws ResourceVanished when read Handle is closed" $ \(handleRead, handleWrite) -> do
+    Hspec.it "throws ResourceVanished when read Handle is closed" $ \(handleRead, handleWrite) -> do
       let writer = newWriter handleWrite
 
       closeHandle handleRead
 
-      shouldThrow (write writer "Hello World") $ \exception ->
+      Hspec.shouldThrow (write writer "Hello World") $ \exception ->
         isInfixOf "resource vanished" (ioeGetErrorString exception)
 
-    it "throws IllegalOperation when write Handle is closed" $ \(_handleRead, handleWrite) -> do
+    Hspec.it "throws IllegalOperation when write Handle is closed" $ \(_handleRead, handleWrite) -> do
       let writer = newWriter handleWrite
 
       closeHandle handleWrite
 
-      shouldThrow (write writer "Hello World") isIllegalOperation
+      Hspec.shouldThrow (write writer "Hello World") isIllegalOperation
