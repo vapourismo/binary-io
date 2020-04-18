@@ -4,19 +4,19 @@ module Data.Binary.IOSpec (spec) where
 
 import Prelude hiding (read)
 
-import Control.Monad.IO.Class
-import Control.Monad
-import Control.Exception
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad (join)
+import Control.Exception (Exception, throw)
 
 import Data.Binary.IO
-import Data.Binary
-import Data.Bifoldable
+import Data.Binary (Binary (..))
+import Data.Bifoldable (bitraverse_)
 
-import Test.Hspec
+import Test.Hspec (Spec, before, describe, it, shouldBe, shouldThrow)
 
-import System.Process
-import System.IO
-import System.IO.Error
+import System.Process (createPipe)
+import System.IO (Handle, BufferMode (NoBuffering), hSetBuffering, hClose, hIsEOF, hIsClosed)
+import System.IO.Error (isIllegalOperation)
 
 -- | Create a pipe with no buffering on read and write side.
 createUnbufferedPipe :: IO (Handle, Handle)
@@ -37,7 +37,7 @@ data ExampleException = ExampleException
   deriving (Show, Exception)
 
 spec :: Spec
-spec = do
+spec =
   describe "Reader" $ before createUnbufferedPipe $ do
     -- Test something with 0 length
     it "reads ()" $ \(handleRead, handleWrite) -> do
