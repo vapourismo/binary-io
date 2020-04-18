@@ -75,17 +75,7 @@ data ReaderError = ReaderGetError -- ^ Error from the 'Binary.Get' operation
 newtype StationaryReader = StationaryReader
   { runStationaryReader :: forall a. Binary.Get.Get a -> IO (StationaryReader, a) }
 
--- | Create a new stationary reader that will read from the same position in the stream every time.
--- However, it will return a new StationaryReader which can be used to consume the rest of the
--- stream.
---
--- Reading using the resulting StationaryReader may throw a 'ReaderError'.
---
--- Other threads reading from the same 'Handle' will interfere with read operations of the
--- StationaryReader.
-newStationaryReader
-  :: Handle -- ^ Handle that will be read from
-  -> IO StationaryReader
+newStationaryReader :: Handle -> IO StationaryReader
 newStationaryReader handle = do
   stream <- ByteString.hGetContents handle
   pure (continue stream)
@@ -120,6 +110,8 @@ newtype Reader = Reader
 --
 -- Other threads reading from the 'Handle' will interfere with read operations of the 'Reader'.
 -- However, the 'Reader' itself is thread-safe and can be utilized concurrently.
+--
+-- Once the 'Handle' reaches EOF, it will be closed.
 --
 -- @since 1.0.0
 newReader
