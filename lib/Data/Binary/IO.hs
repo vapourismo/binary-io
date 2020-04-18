@@ -43,27 +43,27 @@ import System.IO (Handle, hSetBinaryMode)
 
 -- | An error that can occur during reading
 --
--- @since 1.0.0
+-- @since 0.0.1
 data ReaderError = ReaderGetError -- ^ Error from the 'Binary.Get' operation
   { readerErrorRemaining :: !ByteString.ByteString
   -- ^ Unconsumed part of the byte stream
   --
-  -- @since 1.0.0
+  -- @since 0.0.1
 
   , readerErrorOffset :: !Binary.Get.ByteOffset
   -- ^ Error location represented as an offset into the input
   --
-  -- @since 1.0.0
+  -- @since 0.0.1
 
   , readerErrorInput :: !ByteString.ByteString
   -- ^ Input to the 'Binary.Get' operation
   --
-  -- @since 1.0.0
+  -- @since 0.0.1
 
   , readerErrorMessage :: !String
   -- ^ Error message
   --
-  -- @since 1.0.0
+  -- @since 0.0.1
   }
   deriving (Show, Exception.Exception)
 
@@ -91,7 +91,7 @@ newStationaryReader handle = do
   hSetBinaryMode handle True
   StationaryReader <$> ByteString.hGetContents handle
 
--- | @since 1.0.0
+-- | @since 0.0.1
 newtype Reader = Reader (MVar.MVar StationaryReader)
 
 runReader :: Reader -> Binary.Get a -> (a -> IO b) -> IO b
@@ -115,7 +115,7 @@ runReader (Reader readerVar) getter continue =
 --
 -- The given 'Handle' will be swiched to binary mode via 'hSetBinaryMode'.
 --
--- @since 1.0.0
+-- @since 0.0.1
 newReader
   :: Handle -- ^ Handle that will be read from
   -> IO Reader
@@ -125,7 +125,7 @@ newReader handle = do
 
 -- * Writer
 
--- | @since 1.0.0
+-- | @since 0.0.1
 newtype Writer = Writer Handle
 
 runWriter :: Writer -> Binary.Put -> IO ()
@@ -137,7 +137,7 @@ runWriter (Writer handle) putter =
 -- Other threads writing to the same 'Handle' do not interfere with the resulting 'Writer'. The
 -- 'Writer' may be used concurrently.
 --
--- @since 1.0.0
+-- @since 0.0.1
 newWriter
   :: Handle -- ^ Handle that will be written to
   -> Writer
@@ -147,7 +147,7 @@ newWriter = Writer
 
 -- | Pair of 'Reader' and 'Writer'
 --
--- @since 1.0.0
+-- @since 0.0.1
 data Duplex = Duplex
   { duplexWriter :: !Writer
   , duplexReader :: !Reader
@@ -156,7 +156,7 @@ data Duplex = Duplex
 -- | Create a new duplex. The 'Duplex' inherits all the properties of 'Reader' and 'Writer' when
 -- created with 'newReader' and 'newWriter'.
 --
--- @since 1.0.0
+-- @since 0.0.1
 newDuplex
   :: Handle -- ^ Handle that will be read from and written to
   -> IO Duplex
@@ -167,7 +167,7 @@ newDuplex handle =
 
 -- | @r@ can execute 'Binary.Get' operations
 --
--- @since 1.0.0
+-- @since 0.0.1
 class CanGet r where
   runGet
     :: r -- ^ Reader / source
@@ -183,7 +183,7 @@ instance CanGet Duplex where
 
 -- | @w@ can execute 'Binary.Put' operations
 --
--- @since 1.0.0
+-- @since 0.0.1
 class CanPut w where
   runPut
     :: w -- ^ Writer / target
@@ -201,7 +201,7 @@ instance CanPut Duplex where
 
 -- | Read something from @r@.
 --
--- @since 1.0.0
+-- @since 0.0.1
 read
   :: (CanGet r, Binary.Binary a)
   => r -- ^ Read source
@@ -217,7 +217,7 @@ read reader =
 -- Keep in mind, long running actions on @a@ will block other threads when they try to read the same
 -- source.
 --
--- @since 1.0.0
+-- @since 0.0.1
 readWith
   :: (CanGet r, Binary.Binary a)
   => r -- ^ Read source
@@ -228,7 +228,7 @@ readWith reader =
 
 -- | Write something to @w@.
 --
--- @since 1.0.0
+-- @since 0.0.1
 write
   :: (CanPut w, Binary.Binary a)
   => w -- ^ Write target
