@@ -106,7 +106,8 @@ runReader (Reader readerVar) getter continue =
 --
 -- The internal position of the 'Reader' is not advanced when it throws an exception during reading.
 -- This has the consequence that if you're trying to read the same faulty 'Binary.Get' operation
--- multiple times, you will always receive an exception.
+-- multiple times, you will always receive an exception. The same is true for follow-up actions when
+-- using 'readWith'.
 --
 -- Other threads reading from the 'Handle' will interfere with read operations of the 'Reader'.
 -- However, the 'Reader' itself is thread-safe and can be utilized concurrently.
