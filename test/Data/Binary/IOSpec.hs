@@ -8,12 +8,11 @@ import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad (join)
 import Control.Exception (Exception, throw)
 
-import           Data.Typeable (typeOf)
-import           Data.List (isInfixOf)
-import           Data.Binary.IO
-import           Data.Binary (Binary (..), decode)
-import           Data.Bifoldable (bitraverse_)
-import qualified Data.ByteString.Lazy as ByteString
+import Data.Typeable (typeOf)
+import Data.List (isInfixOf)
+import Data.Binary.IO
+import Data.Binary (Binary (..))
+import Data.Bifoldable (bitraverse_)
 
 import Test.Hspec (Spec, Expectation, before, describe, it, shouldBe, shouldThrow)
 
@@ -40,34 +39,43 @@ data ExampleException = ExampleException
   deriving (Show, Exception)
 
 -- | Check that a read from the 'Handle' yields the given value.
-shouldRead :: (Show a, Eq a, Binary a) => Handle -> a -> Expectation
-shouldRead handle expectedValue = do
-  contents <- ByteString.hGetContents handle
-  shouldBe (decode contents) expectedValue
+shouldRead :: (Show a, Eq a, Binary a) => Reader -> a -> Expectation
+shouldRead reader expectedValue = do
+  value <- read reader
+  shouldBe value expectedValue
+
+-- | Close a handle and verify.
+closeHandle :: Handle -> Expectation
+closeHandle handle = do
+  hClose handle
+  closed <- hIsClosed handle
+  shouldBe closed True
 
 spec :: Spec
 spec = before createUnbufferedPipe $ do
   describe "Reader" $ do
+    let
+      testReads value =
+        it ("reads " <> show (typeOf value)) $ \(handleRead, handleWrite) -> do
+          reader <- liftIO (newReader handleRead)
+
+          write handleWrite value
+          shouldRead reader value
+
+          write handleWrite value
+          write handleWrite value
+
+          shouldRead reader value
+          shouldRead reader value
+
     -- Test something with 0 length
-    it "reads ()" $ \(handleRead, handleWrite) -> do
-      reader <- liftIO (newReader handleRead)
-      write handleWrite ()
-      () <- read reader
-      pure ()
+    testReads ()
 
     -- Test something with fixed non-zero length
-    it "reads Int" $ \(handleRead, handleWrite) -> do
-      reader <- liftIO (newReader handleRead)
-      write handleWrite (1337 :: Int)
-      1337 <- read reader :: IO Int
-      pure ()
+    testReads (1337 :: Int)
 
     -- Test something with variable length
-    it "reads String" $ \(handleRead, handleWrite) -> do
-      reader <- liftIO (newReader handleRead)
-      write handleWrite "Hello World"
-      "Hello World" <- read reader
-      pure ()
+    testReads "Hello World"
 
     -- When the read handle has reached its end, reading from it should not throw an error.
     -- However, no more input can be read therefore the underling 'Get' parser should fail.
@@ -84,9 +92,7 @@ spec = before createUnbufferedPipe $ do
     it "throws IllegalOperation when read Handle is closed" $ \(handleRead, _handleWrite) -> do
       reader <- liftIO (newReader handleRead)
 
-      hClose handleRead
-      closed <- hIsClosed handleRead
-      shouldBe closed True
+      closeHandle handleRead
 
       shouldThrow (read reader :: IO String) isIllegalOperation
 
@@ -115,9 +121,16 @@ spec = before createUnbufferedPipe $ do
       testWrites value =
         it ("writes " <> show (typeOf value)) $ \(handleRead, handleWrite) -> do
           let writer = newWriter handleWrite
+          reader <- newReader handleRead
 
           write writer value
-          shouldRead handleRead value
+          shouldRead reader value
+
+          write writer value
+          write writer value
+
+          shouldRead reader value
+          shouldRead reader value
 
     -- Test something with 0 length
     testWrites ()
@@ -131,9 +144,7 @@ spec = before createUnbufferedPipe $ do
     it "throws ResourceVanished when read Handle is closed" $ \(handleRead, handleWrite) -> do
       let writer = newWriter handleWrite
 
-      hClose handleRead
-      closed <- hIsClosed handleRead
-      shouldBe closed True
+      closeHandle handleRead
 
       shouldThrow (write writer "Hello World") $ \exception ->
         isInfixOf "resource vanished" (ioeGetErrorString exception)
@@ -141,8 +152,6 @@ spec = before createUnbufferedPipe $ do
     it "throws IllegalOperation when write Handle is closed" $ \(_handleRead, handleWrite) -> do
       let writer = newWriter handleWrite
 
-      hClose handleWrite
-      closed <- hIsClosed handleWrite
-      shouldBe closed True
+      closeHandle handleWrite
 
       shouldThrow (write writer "Hello World") isIllegalOperation
