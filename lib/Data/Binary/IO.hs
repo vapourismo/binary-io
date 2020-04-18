@@ -120,7 +120,7 @@ newtype Reader = Reader
 -- multiple times, you will always receive an exception.
 --
 -- Other threads reading from the 'Handle' will interfere with read operations of the 'Reader'.
--- However, the 'Reader' itself is thread-safe and can be utilized in concurrently.
+-- However, the 'Reader' itself is thread-safe and can be utilized concurrently.
 --
 -- @since 1.0.0
 newReader
@@ -218,8 +218,13 @@ read
 read reader =
   runGet reader Binary.get pure
 
--- | Read something from @r@ and perform an 'IO' action with it. If the given action throws an
--- exception, the read is not considered successful and will not advance the underlying read source.
+-- | Read something from @r@ and perform an 'IO' action with it.
+--
+-- If the given action throws an exception, the read is not considered successful and will not
+-- advance the underlying read source.
+--
+-- Keep in mind, long running actions on @a@ will block other threads when they try to read the same
+-- source.
 --
 -- @since 1.0.0
 readWith
