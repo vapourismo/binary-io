@@ -4,19 +4,22 @@ module Data.Binary.IOSpec (spec) where
 
 import Prelude hiding (read)
 
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad (join)
 import Control.Exception (Exception, throw)
 
-import Data.Binary.IO
-import Data.Binary (Binary (..))
-import Data.Bifoldable (bitraverse_)
+import           Data.Typeable (typeOf)
+import           Data.List (isInfixOf)
+import           Data.Binary.IO
+import           Data.Binary (Binary (..), decode)
+import           Data.Bifoldable (bitraverse_)
+import qualified Data.ByteString.Lazy as ByteString
 
-import Test.Hspec (Spec, before, describe, it, shouldBe, shouldThrow)
+import Test.Hspec (Spec, Expectation, before, describe, it, shouldBe, shouldThrow)
 
 import System.Process (createPipe)
 import System.IO (Handle, BufferMode (NoBuffering), hSetBuffering, hClose, hIsEOF, hIsClosed)
-import System.IO.Error (isIllegalOperation)
+import System.IO.Error (isIllegalOperation, ioeGetErrorString)
 
 -- | Create a pipe with no buffering on read and write side.
 createUnbufferedPipe :: IO (Handle, Handle)
@@ -36,9 +39,15 @@ instance Binary BadGet where
 data ExampleException = ExampleException
   deriving (Show, Exception)
 
+-- | Check that a read from the 'Handle' yields the given value.
+shouldRead :: (Show a, Eq a, Binary a) => Handle -> a -> Expectation
+shouldRead handle expectedValue = do
+  contents <- ByteString.hGetContents handle
+  shouldBe (decode contents) expectedValue
+
 spec :: Spec
-spec =
-  describe "Reader" $ before createUnbufferedPipe $ do
+spec = before createUnbufferedPipe $ do
+  describe "Reader" $ do
     -- Test something with 0 length
     it "reads ()" $ \(handleRead, handleWrite) -> do
       reader <- liftIO (newReader handleRead)
@@ -72,7 +81,7 @@ spec =
       shouldThrow (read reader :: IO String) (\ReaderGetError{} -> True)
 
     -- Reading from a closed handle should throw. That exception needs to surface.
-    it "throws IllegalOperation when Handle is closed" $ \(handleRead, _handleWrite) -> do
+    it "throws IllegalOperation when read Handle is closed" $ \(handleRead, _handleWrite) -> do
       reader <- liftIO (newReader handleRead)
 
       hClose handleRead
@@ -100,3 +109,40 @@ spec =
       "Hello World" <- read reader
 
       pure ()
+
+  describe "Writer" $ do
+    let
+      testWrites value =
+        it ("writes " <> show (typeOf value)) $ \(handleRead, handleWrite) -> do
+          let writer = newWriter handleWrite
+
+          write writer value
+          shouldRead handleRead value
+
+    -- Test something with 0 length
+    testWrites ()
+
+    -- Test something with fixed non-zero length
+    testWrites (1337 :: Int)
+
+    -- Test something with variable length
+    testWrites "Hello World"
+
+    it "throws ResourceVanished when read Handle is closed" $ \(handleRead, handleWrite) -> do
+      let writer = newWriter handleWrite
+
+      hClose handleRead
+      closed <- hIsClosed handleRead
+      shouldBe closed True
+
+      shouldThrow (write writer "Hello World") $ \exception ->
+        isInfixOf "resource vanished" (ioeGetErrorString exception)
+
+    it "throws IllegalOperation when write Handle is closed" $ \(_handleRead, handleWrite) -> do
+      let writer = newWriter handleWrite
+
+      hClose handleWrite
+      closed <- hIsClosed handleWrite
+      shouldBe closed True
+
+      shouldThrow (write writer "Hello World") isIllegalOperation
