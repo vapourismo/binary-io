@@ -1,9 +1,12 @@
+{-# LANGUAGE DeriveAnyClass #-}
+
 module Data.Binary.IOSpec (spec) where
 
 import Prelude hiding (read)
 
 import Control.Monad.IO.Class
 import Control.Monad
+import Control.Exception
 
 import Data.Binary.IO
 import Data.Binary
@@ -29,6 +32,9 @@ instance Binary BadGet where
   put = error "Not implemented"
 
   get = fail "get for BadGet will always"
+
+data ExampleException = ExampleException
+  deriving (Show, Exception)
 
 spec :: Spec
 spec = do
@@ -81,6 +87,16 @@ spec = do
 
       write handleWrite "Hello World"
       shouldThrow (read reader :: IO BadGet) (\ReaderGetError{} -> True)
+      "Hello World" <- read reader
+
+      pure ()
+
+    -- Failing continuations should not advance the stream position.
+    it "preserves the stream position when continuation fails" $ \(handleRead, handleWrite) -> do
+      reader <- liftIO (newReader handleRead)
+
+      write handleWrite "Hello World"
+      shouldThrow (readWith reader (\() -> throw ExampleException)) (\ExampleException -> True)
       "Hello World" <- read reader
 
       pure ()

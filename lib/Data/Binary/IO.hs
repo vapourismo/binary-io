@@ -22,7 +22,6 @@ module Data.Binary.IO
   , newDuplex
 
     -- * Classes
-
   , CanGet (..)
   , read
   , readWith
