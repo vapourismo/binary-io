@@ -215,8 +215,8 @@ read reader =
 -- If the given action throws an exception, the read is not considered successful and will not
 -- advance the underlying read source.
 --
--- Keep in mind, long running actions on @a@ will block other threads when they try to read the same
--- source.
+-- Keep in mind, long running actions on @a@ will block other threads when they try to read the from
+-- the same source @r@.
 --
 -- @since 0.0.1
 readWith
