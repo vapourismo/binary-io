@@ -25,6 +25,8 @@ module Data.Binary.IO
 
   , CanGet (..)
   , read
+  , readWith
+
   , CanPut (..)
   , write
   )
@@ -107,7 +109,7 @@ newStationaryReader handle = do
 
 -- | @since 1.0.0
 newtype Reader = Reader
-  { runReader :: forall a. Binary.Get a -> IO a }
+  { runReader :: forall a b. Binary.Get a -> (a -> IO b) -> IO b }
 
 -- | Create a new reader.
 --
@@ -127,9 +129,10 @@ newReader
 newReader handle = do
   posReader <- newStationaryReader handle
   readerVar <- MVar.newMVar posReader
-  pure $ Reader $ \getter ->
-    MVar.modifyMVar readerVar $ \posReader ->
-      runStationaryReader posReader getter
+  pure $ Reader $ \getter continue ->
+    MVar.modifyMVar readerVar $ \posReader -> do
+      toReturn <- runStationaryReader posReader getter
+      traverse continue toReturn
 
 -- * Writer
 
@@ -178,7 +181,8 @@ class CanGet r where
   runGet
     :: r -- ^ Reader / source
     -> Binary.Get a -- ^ Operation to execute
-    -> IO a
+    -> (a -> IO b) -- ^ What to do with @a@
+    -> IO b
 
 instance CanGet Reader where
   runGet = runReader
@@ -212,6 +216,18 @@ read
   => r -- ^ Read source
   -> IO a
 read reader =
+  runGet reader Binary.get pure
+
+-- | Read something from @r@ and perform an 'IO' action with it. If the given action throws an
+-- exception, the read is not considered successful and will not advance the underlying read source.
+--
+-- @since 1.0.0
+readWith
+  :: (CanGet r, Binary.Binary a)
+  => r -- ^ Read source
+  -> (a -> IO b) -- ^ What to do with @a@
+  -> IO b
+readWith reader =
   runGet reader Binary.get
 
 -- | Write something to @w@.
