@@ -1,80 +1,70 @@
 name: Haskell Integration
 
 on:
-  push:
-    branches:
-      - master
+  push: {}
 
   pull_request:
     branches:
       - master
 
 jobs:
-  ghc-8-10-1_cabal-3-2:
+  BuildAndTest:
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        ghc:
+          - "8.10.1"
+          - "8.8.3"
+          - "8.6.5"
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-    - uses: actions/setup-haskell@v1
-      with:
-        ghc-version: '8.10.1'
-        cabal-version: '3.2'
+      - uses: actions/setup-haskell@v1
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: "3.2"
 
-    - name: Update Hackage snapshot
-      run: cabal update
+      - uses: actions/cache@v1
+        with:
+          path: ~/.cabal
+          key: cabal-root-${{ matrix.ghc }}
 
-    - name: Build everything
-      run: cabal configure --enable-documentation --disable-optimization
+      - name: Update Hackage snapshot
+        run: cabal update
 
-    - name: Build library
-      run: cabal build
+      - name: Configure library
+        run: cabal configure --enable-documentation --disable-optimization
 
-    - name: Run tests
-      run: cabal test
+      - name: Build library
+        run: cabal build
 
-  ghc-8-8-3_cabal-3-2:
+      - name: Run tests
+        run: cabal test
+
+  HLint:
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        ghc:
+          - "8.10.1"
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-    - uses: actions/setup-haskell@v1
-      with:
-        ghc-version: '8.8.3'
-        cabal-version: '3.2'
+      - uses: actions/setup-haskell@v1
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: "3.2"
 
-    - name: Update Hackage snapshot
-      run: cabal update
+      - uses: actions/cache@v1
+        with:
+          path: ~/.cabal
+          key: cabal-root-${{ matrix.ghc }}
 
-    - name: Build everything
-      run: cabal configure --enable-documentation --disable-optimization
+      - name: Update Hackage snapshot
+        run: cabal update
 
-    - name: Build library
-      run: cabal build
+      - name: Install HLint
+        run: cabal install --installdir=. hlint
 
-    - name: Run tests
-      run: cabal test
-
-  ghc-8-6-5_cabal-3-2:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v2
-
-    - uses: actions/setup-haskell@v1
-      with:
-        ghc-version: '8.6.5'
-        cabal-version: '3.2'
-
-    - name: Update Hackage snapshot
-      run: cabal update
-
-    - name: Build everything
-      run: cabal configure --enable-documentation --disable-optimization
-
-    - name: Build library
-      run: cabal build
-
-    - name: Run tests
-      run: cabal test
+      - name: Run HLint
+        run: ./hlint .
