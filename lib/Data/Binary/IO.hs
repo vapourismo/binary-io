@@ -28,16 +28,14 @@ where
 
 import Prelude hiding (read)
 
-import qualified Control.Exception as Exception
 import qualified Control.Concurrent.MVar as MVar
-
-import qualified Data.ByteString.Lazy as ByteString
-import qualified Data.ByteString as ByteString.Strict
+import qualified Control.Exception as Exception
+import qualified Data.Binary as Binary
 import qualified Data.Binary.Get as Binary.Get
 import qualified Data.Binary.Put as Binary.Put
-import qualified Data.Binary as Binary
-
-import System.IO (Handle, hSetBinaryMode)
+import qualified Data.ByteString as ByteString.Strict
+import qualified Data.ByteString.Lazy as ByteString
+import           System.IO (Handle, hSetBinaryMode)
 
 -- * Reader
 

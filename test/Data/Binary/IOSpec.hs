@@ -4,21 +4,21 @@ module Data.Binary.IOSpec (spec) where
 
 import Prelude hiding (read)
 
-import Control.Monad.IO.Class (MonadIO (liftIO))
-import Control.Monad (join)
 import Control.Exception (Exception, throw)
+import Control.Monad (join)
+import Control.Monad.IO.Class (MonadIO (liftIO))
 
-import Data.Typeable (typeOf)
-import Data.List (isInfixOf)
-import Data.Binary.IO
-import Data.Binary (Binary (..))
 import Data.Bifoldable (bitraverse_)
+import Data.Binary (Binary (..))
+import Data.Binary.IO
+import Data.List (isInfixOf)
+import Data.Typeable (typeOf)
 
 import qualified Test.Hspec as Hspec
 
-import           System.Process (createPipe)
 import qualified System.IO as IO
-import           System.IO.Error (isIllegalOperation, ioeGetErrorString)
+import           System.IO.Error (ioeGetErrorString, isIllegalOperation)
+import           System.Process (createPipe)
 
 -- | Create a pipe with no buffering on read and write side.
 createUnbufferedPipe :: IO (IO.Handle, IO.Handle)
