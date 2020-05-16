@@ -4,7 +4,7 @@ module Data.Binary.IOSpec (spec) where
 
 import Prelude hiding (read)
 
-import Control.Exception (Exception, throw)
+import Control.Exception (Exception)
 import Control.Monad (join)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 
