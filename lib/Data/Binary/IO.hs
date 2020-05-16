@@ -35,7 +35,7 @@ import qualified Data.Binary.Get as Binary.Get
 import qualified Data.Binary.Put as Binary.Put
 import qualified Data.ByteString as ByteString.Strict
 import qualified Data.ByteString.Lazy as ByteString
-import           Data.IORef (IORef, atomicModifyIORef', newIORef)
+import           Data.IORef (IORef, atomicModifyIORef, newIORef)
 import           System.IO (Handle, hSetBinaryMode)
 
 -- * Reader
@@ -95,7 +95,10 @@ newtype Reader = Reader (IORef StationaryReader)
 
 runReader :: Reader -> Binary.Get a -> IO a
 runReader (Reader readerVar) getter =
-  join $ atomicModifyIORef' readerVar $ \posReader ->
+  -- We use 'atomicModifyIORef' which does not force the 'StationaryReader' to WHNF. Forcing the
+  -- 'StationaryReader' might block indefinitely because it will try to read more from the
+  -- underlying 'Handle'.
+  join $ atomicModifyIORef readerVar $ \posReader ->
     case runStationaryReader posReader getter of
       Left error   -> (posReader, Exception.throwIO error)
       Right result -> pure <$> result
