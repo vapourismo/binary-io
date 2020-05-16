@@ -106,18 +106,6 @@ spec = Hspec.before createUnbufferedPipe $ do
 
       pure ()
 
-    -- Failing continuations should not advance the stream position.
-    Hspec.it "preserves the stream position when continuation fails" $ \(handleRead, handleWrite) -> do
-      reader <- liftIO (newReader handleRead)
-
-      write handleWrite "Hello World"
-      Hspec.shouldThrow
-        (readWith reader (\() -> throw ExampleException))
-        (\ExampleException -> True)
-      "Hello World" <- read reader
-
-      pure ()
-
   Hspec.describe "Writer" $ do
     let
       testWrites value =
