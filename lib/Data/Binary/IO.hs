@@ -19,7 +19,6 @@ module Data.Binary.IO
     -- * Classes
   , CanGet (..)
   , read
-  , readWith
 
   , CanPut (..)
   , write
@@ -28,13 +27,15 @@ where
 
 import Prelude hiding (read)
 
-import qualified Control.Concurrent.MVar as MVar
 import qualified Control.Exception as Exception
+import           Control.Monad (join)
+import           Data.Bifunctor (bimap)
 import qualified Data.Binary as Binary
 import qualified Data.Binary.Get as Binary.Get
 import qualified Data.Binary.Put as Binary.Put
 import qualified Data.ByteString as ByteString.Strict
 import qualified Data.ByteString.Lazy as ByteString
+import           Data.IORef (IORef, atomicModifyIORef', newIORef)
 import           System.IO (Handle, hSetBinaryMode)
 
 -- * Reader
@@ -67,22 +68,22 @@ data ReaderError = ReaderGetError -- ^ Error from the 'Binary.Get' operation
 
 newtype StationaryReader = StationaryReader ByteString.ByteString
 
-runStationaryReader :: StationaryReader -> Binary.Get.Get a -> IO (StationaryReader, a)
-runStationaryReader (StationaryReader stream) getter =  do
-  -- Evaluate the result of 'runGetOrFail' to WHNF. This should be enough because it means that
-  -- the parser has decided between 'Left' and 'Right'.
-  result <- Exception.evaluate (Binary.Get.runGetOrFail getter stream)
-  case result of
-    Left (remainingBody, offset, errorMessage) ->
-      Exception.throw ReaderGetError
+runStationaryReader
+  :: StationaryReader
+  -> Binary.Get.Get a
+  -> Either ReaderError (StationaryReader, a)
+runStationaryReader (StationaryReader stream) getter =
+  bimap withError withSuccess (Binary.Get.runGetOrFail getter stream)
+  where
+    withError (remainingBody, offset, errorMessage) =
+      ReaderGetError
         { readerErrorRemaining = remainingBody
         , readerErrorOffset = offset
         , readerErrorInput = stream
         , readerErrorMessage = errorMessage
         }
 
-    Right (tailStream, _, value) ->
-      pure (StationaryReader tailStream, value)
+    withSuccess (tailStream, _, value) = (StationaryReader tailStream, value)
 
 newStationaryReader :: Handle -> IO StationaryReader
 newStationaryReader handle = do
@@ -90,13 +91,14 @@ newStationaryReader handle = do
   StationaryReader <$> ByteString.hGetContents handle
 
 -- | @since 0.0.1
-newtype Reader = Reader (MVar.MVar StationaryReader)
+newtype Reader = Reader (IORef StationaryReader)
 
-runReader :: Reader -> Binary.Get a -> (a -> IO b) -> IO b
-runReader (Reader readerVar) getter continue =
-  MVar.modifyMVar readerVar $ \posReader -> do
-    toReturn <- runStationaryReader posReader getter
-    traverse continue toReturn
+runReader :: Reader -> Binary.Get a -> IO a
+runReader (Reader readerVar) getter =
+  join $ atomicModifyIORef' readerVar $ \posReader ->
+    case runStationaryReader posReader getter of
+      Left error   -> (posReader, Exception.throwIO error)
+      Right result -> pure <$> result
 
 -- | Create a new reader.
 --
@@ -104,8 +106,7 @@ runReader (Reader readerVar) getter continue =
 --
 -- The internal position of the 'Reader' is not advanced when it throws an exception during reading.
 -- This has the consequence that if you're trying to read with the same faulty 'Binary.Get'
--- operation multiple times, you will always receive an exception. The same is true for follow-up
--- actions when using 'readWith'.
+-- operation multiple times, you will always receive an exception.
 --
 -- Other threads reading from the 'Handle' will interfere with read operations of the 'Reader'.
 -- However, the 'Reader' itself is thread-safe and can be utilized concurrently.
@@ -120,7 +121,7 @@ newReader
   -> IO Reader
 newReader handle = do
   posReader <- newStationaryReader handle
-  Reader <$> MVar.newMVar posReader
+  Reader <$> newIORef posReader
 
 -- * Writer
 
@@ -171,8 +172,7 @@ class CanGet r where
   runGet
     :: r -- ^ Reader / source
     -> Binary.Get a -- ^ Operation to execute
-    -> (a -> IO b) -- ^ What to do with @a@
-    -> IO b
+    -> IO a
 
 instance CanGet Reader where
   runGet = runReader
@@ -206,23 +206,6 @@ read
   => r -- ^ Read source
   -> IO a
 read reader =
-  runGet reader Binary.get pure
-
--- | Read something from @r@ and perform an 'IO' action with it.
---
--- If the given action throws an exception, the read is not considered successful and will not
--- advance the underlying read source.
---
--- Keep in mind, long running actions on @a@ will block other threads when they try to read from the
--- same source @r@.
---
--- @since 0.0.1
-readWith
-  :: (CanGet r, Binary.Binary a)
-  => r -- ^ Read source
-  -> (a -> IO b) -- ^ What to do with @a@
-  -> IO b
-readWith reader =
   runGet reader Binary.get
 
 -- | Write something to @w@.
