@@ -1,6 +1,6 @@
 # binary-io
 
-## 0.0.2
+## 0.1.0
 
 * Remove continuation parameter to 'runGet' and 'readWith'
 
