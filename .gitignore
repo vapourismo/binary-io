@@ -2,4 +2,6 @@
 dist/
 dist-newstyle/
 cabal.project.local
+
+# VS Code
 *.code-workspace
