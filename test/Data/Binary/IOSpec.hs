@@ -8,11 +8,13 @@ import Control.Exception (Exception)
 import Control.Monad (join)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 
-import Data.Bifoldable (bitraverse_)
-import Data.Binary (Binary (..))
-import Data.Binary.IO
-import Data.List (isInfixOf)
-import Data.Typeable (typeOf)
+import           Data.Bifoldable (bitraverse_)
+import           Data.Binary (Binary (..))
+import           Data.Binary.IO
+import qualified Data.ByteString as ByteString
+import           Data.Foldable (for_)
+import           Data.List (isInfixOf)
+import           Data.Typeable (typeOf)
 
 import qualified Test.Hspec as Hspec
 
@@ -51,14 +53,40 @@ closeHandle handle = do
   closed <- IO.hIsClosed handle
   Hspec.shouldBe closed True
 
+withReader :: Hspec.SpecWith (Reader, IO.Handle) -> Hspec.SpecWith a
+withReader = Hspec.aroundWith $ \run _ -> do
+  (handleRead, handleWrite) <- createUnbufferedPipe
+
+  reader <- newReader handleRead
+  run (reader, handleWrite)
+
+  readerWith <- newReaderWith (ByteString.hGetSome handleRead 1024)
+  run (readerWith, handleWrite)
+
+withReaderAndWriter :: Hspec.SpecWith (Reader, Writer) -> Hspec.SpecWith a
+withReaderAndWriter =
+  Hspec.aroundWith $ \run _ ->
+    for_ readerMakers $ \mkReader -> for_ writerMakers $ \mkWriter -> do
+      (handleRead, handleWrite) <- createUnbufferedPipe
+
+      reader <- mkReader handleRead
+      let writer = mkWriter handleWrite
+
+      run (reader, writer)
+  where
+    readerMakers = [newReader, \handle -> newReaderWith (ByteString.hGetSome handle 1024)]
+
+    writerMakers = [newWriter, newWriterWith . ByteString.hPut]
+
+withPipe :: Hspec.SpecWith (IO.Handle, IO.Handle) -> Hspec.Spec
+withPipe = Hspec.before createUnbufferedPipe
+
 spec :: Hspec.Spec
-spec = Hspec.before createUnbufferedPipe $ do
+spec = do
   Hspec.describe "Reader" $ do
     let
       testReads value =
-        Hspec.it ("reads " <> show (typeOf value)) $ \(handleRead, handleWrite) -> do
-          reader <- liftIO (newReader handleRead)
-
+        Hspec.it ("reads " <> show (typeOf value)) $ \(reader, handleWrite) -> do
           write handleWrite value
           shouldRead reader value
 
@@ -68,51 +96,50 @@ spec = Hspec.before createUnbufferedPipe $ do
           shouldRead reader value
           shouldRead reader value
 
-    -- Test something with 0 length
-    testReads ()
+    withReader $ do
+      -- Test something with 0 length
+      testReads ()
 
-    -- Test something with fixed non-zero length
-    testReads (1337 :: Int)
+      -- Test something with fixed non-zero length
+      testReads (1337 :: Int)
 
-    -- Test something with variable length
-    testReads "Hello World"
+      -- Test something with variable length
+      testReads "Hello World"
 
-    -- When the read handle has reached its end, reading from it should not throw an error.
-    -- However, no more input can be read therefore the underling 'Get' parser should fail.
-    Hspec.it "throws ReaderGetError when Handle is EOF" $ \(handleRead, handleWrite) -> do
-      reader <- liftIO (newReader handleRead)
+    withPipe $ do
+      -- When the read handle has reached its end, reading from it should not throw an error.
+      -- However, no more input can be read therefore the underling 'Get' parser should fail.
+      Hspec.it "throws ReaderGetError when Handle is EOF" $ \(handleRead, handleWrite) -> do
+        reader <- liftIO (newReader handleRead)
 
-      IO.hClose handleWrite
-      eof <- IO.hIsEOF handleRead
-      Hspec.shouldBe eof True
+        IO.hClose handleWrite
+        eof <- IO.hIsEOF handleRead
+        Hspec.shouldBe eof True
 
-      Hspec.shouldThrow (read reader :: IO String) (\ReaderGetError{} -> True)
+        Hspec.shouldThrow (read reader :: IO String) (\ReaderGetError{} -> True)
 
-    -- Reading from a closed handle should throw. That exception needs to surface.
-    Hspec.it "throws IllegalOperation when read Handle is closed" $ \(handleRead, _handleWrite) -> do
-      reader <- liftIO (newReader handleRead)
+      -- Reading from a closed handle should throw. That exception needs to surface.
+      Hspec.it "throws IllegalOperation when read Handle is closed" $ \(handleRead, _handleWrite) -> do
+        reader <- liftIO (newReader handleRead)
 
-      closeHandle handleRead
+        closeHandle handleRead
 
-      Hspec.shouldThrow (read reader :: IO String) isIllegalOperation
+        Hspec.shouldThrow (read reader :: IO String) isIllegalOperation
 
-    -- Failing 'Get' operations should not advance the stream position.
-    Hspec.it "preserves the stream position when Get operation fails" $ \(handleRead, handleWrite) -> do
-      reader <- liftIO (newReader handleRead)
+      -- Failing 'Get' operations should not advance the stream position.
+      Hspec.it "preserves the stream position when Get operation fails" $ \(handleRead, handleWrite) -> do
+        reader <- liftIO (newReader handleRead)
 
-      write handleWrite "Hello World"
-      Hspec.shouldThrow (read reader :: IO BadGet) (\ReaderGetError{} -> True)
-      "Hello World" <- read reader
+        write handleWrite "Hello World"
+        Hspec.shouldThrow (read reader :: IO BadGet) (\ReaderGetError{} -> True)
+        "Hello World" <- read reader
 
-      pure ()
+        pure ()
 
   Hspec.describe "Writer" $ do
     let
       testWrites value =
-        Hspec.it ("writes " <> show (typeOf value)) $ \(handleRead, handleWrite) -> do
-          let writer = newWriter handleWrite
-          reader <- newReader handleRead
-
+        Hspec.it ("writes " <> show (typeOf value)) $ \(reader, writer) -> do
           write writer value
           shouldRead reader value
 
@@ -122,26 +149,28 @@ spec = Hspec.before createUnbufferedPipe $ do
           shouldRead reader value
           shouldRead reader value
 
-    -- Test something with 0 length
-    testWrites ()
+    withReaderAndWriter $ do
+      -- Test something with 0 length
+      testWrites ()
 
-    -- Test something with fixed non-zero length
-    testWrites (1337 :: Int)
+      -- Test something with fixed non-zero length
+      testWrites (1337 :: Int)
 
-    -- Test something with variable length
-    testWrites "Hello World"
+      -- Test something with variable length
+      testWrites "Hello World"
 
-    Hspec.it "throws ResourceVanished when read Handle is closed" $ \(handleRead, handleWrite) -> do
-      let writer = newWriter handleWrite
+    withPipe $ do
+      Hspec.it "throws ResourceVanished when read Handle is closed" $ \(handleRead, handleWrite) -> do
+        let writer = newWriter handleWrite
 
-      closeHandle handleRead
+        closeHandle handleRead
 
-      Hspec.shouldThrow (write writer "Hello World") $ \exception ->
-        isInfixOf "resource vanished" (ioeGetErrorString exception)
+        Hspec.shouldThrow (write writer "Hello World") $ \exception ->
+          isInfixOf "resource vanished" (ioeGetErrorString exception)
 
-    Hspec.it "throws IllegalOperation when write Handle is closed" $ \(_handleRead, handleWrite) -> do
-      let writer = newWriter handleWrite
+      Hspec.it "throws IllegalOperation when write Handle is closed" $ \(_handleRead, handleWrite) -> do
+        let writer = newWriter handleWrite
 
-      closeHandle handleWrite
+        closeHandle handleWrite
 
-      Hspec.shouldThrow (write writer "Hello World") isIllegalOperation
+        Hspec.shouldThrow (write writer "Hello World") isIllegalOperation

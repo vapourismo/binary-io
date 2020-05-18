@@ -7,14 +7,17 @@ module Data.Binary.IO
 
   , Reader
   , newReader
+  , newReaderWith
 
     -- * Writers
   , Writer
   , newWriter
+  , newWriterWith
 
     -- * Duplex
-  , Duplex
+  , Duplex (..)
   , newDuplex
+  , newDuplexWith
 
     -- * Classes
   , CanGet (..)
@@ -35,8 +38,10 @@ import qualified Data.Binary.Get as Binary.Get
 import qualified Data.Binary.Put as Binary.Put
 import qualified Data.ByteString as ByteString.Strict
 import qualified Data.ByteString.Lazy as ByteString
+import           Data.ByteString.Lazy.Internal (ByteString (Chunk, Empty))
 import           Data.IORef (IORef, atomicModifyIORef, newIORef)
 import           System.IO (Handle, hSetBinaryMode)
+import           System.IO.Unsafe (unsafeInterleaveIO)
 
 -- * Reader
 
@@ -90,6 +95,10 @@ newStationaryReader handle = do
   hSetBinaryMode handle True
   StationaryReader <$> ByteString.hGetContents handle
 
+newStationaryReaderWith :: IO ByteString.Strict.ByteString -> IO StationaryReader
+newStationaryReaderWith get =
+  StationaryReader <$> mkStream get
+
 -- | @since 0.0.1
 newtype Reader = Reader (IORef StationaryReader)
 
@@ -126,14 +135,24 @@ newReader handle = do
   posReader <- newStationaryReader handle
   Reader <$> newIORef posReader
 
+-- | This function works very similar to 'newReader' except no 'Handle' is involved.
+--
+-- @since 0.1.1
+newReaderWith
+  :: IO ByteString.Strict.ByteString -- ^ Chunk producer
+  -> IO Reader
+newReaderWith get = do
+  posReader <- newStationaryReaderWith get
+  Reader <$> newIORef posReader
+
 -- * Writer
 
 -- | @since 0.0.1
-newtype Writer = Writer Handle
+newtype Writer = Writer (ByteString.Strict.ByteString -> IO ())
 
 runWriter :: Writer -> Binary.Put -> IO ()
-runWriter (Writer handle) putter =
-  writeBytesAtomically handle (Binary.Put.runPut putter)
+runWriter (Writer write) putter =
+  write (ByteString.toStrict (Binary.Put.runPut putter))
 
 -- | Create a writer.
 --
@@ -144,7 +163,17 @@ runWriter (Writer handle) putter =
 newWriter
   :: Handle -- ^ Handle that will be written to
   -> Writer
-newWriter = Writer
+newWriter handle =
+  Writer (ByteString.Strict.hPut handle)
+
+-- | Create a writer using a function that handles the output chunks.
+--
+-- @since 0.1.1
+newWriterWith
+  :: (ByteString.Strict.ByteString -> IO ()) -- ^ Chunk handler
+  -> Writer
+newWriterWith =
+  Writer
 
 -- * Duplex
 
@@ -165,6 +194,16 @@ newDuplex
   -> IO Duplex
 newDuplex handle =
   Duplex (newWriter handle) <$> newReader handle
+
+-- | Combines 'newReaderWith' and 'newWriterWith'.
+--
+-- @since 0.1.1
+newDuplexWith
+  :: IO ByteString.Strict.ByteString
+  -> (ByteString.Strict.ByteString -> IO ())
+  -> IO Duplex
+newDuplexWith get push =
+  Duplex (newWriterWith push) <$> newReaderWith get
 
 -- * Classes
 
@@ -193,7 +232,8 @@ class CanPut w where
     -> IO ()
 
 instance CanPut Handle where
-  runPut handle putter = writeBytesAtomically handle (Binary.Put.runPut putter)
+  runPut handle putter =
+    ByteString.Strict.hPut handle (ByteString.toStrict (Binary.Put.runPut putter))
 
 instance CanPut Writer where
   runPut = runWriter
@@ -224,10 +264,17 @@ write writer value =
 
 -- * Utilities
 
--- | Write contents of the given lazy byte string all at once.
-writeBytesAtomically
-  :: Handle -- ^ Handle to write to
-  -> ByteString.ByteString -- ^ Bytes to be written
-  -> IO ()
-writeBytesAtomically handle payload =
-  ByteString.Strict.hPut handle (ByteString.toStrict payload)
+-- | Construct a lazy 'ByteString.ByteString' from a function that retrieves chunks.
+-- Returning an empty chunk indicates the end of the stream.
+mkStream :: IO ByteString.Strict.ByteString -> IO ByteString.ByteString
+mkStream get =
+  readLazily
+  where
+    read = do
+      chunk <- get
+      if ByteString.Strict.null chunk then
+        pure Empty
+      else
+        Chunk chunk <$> readLazily
+
+    readLazily = unsafeInterleaveIO read
