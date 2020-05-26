@@ -14,6 +14,9 @@ module Data.Binary.IO
   , newWriter
   , newWriterWith
 
+    -- * Pipe
+  , newPipe
+
     -- * Duplex
   , Duplex (..)
   , newDuplex
@@ -30,8 +33,10 @@ where
 
 import Prelude hiding (read)
 
+import qualified Control.Concurrent.Chan as Chan
+import qualified Control.Concurrent.MVar as MVar
 import qualified Control.Exception as Exception
-import           Control.Monad (join)
+import           Control.Monad (join, unless, void)
 import           Data.Bifunctor (bimap)
 import qualified Data.Binary as Binary
 import qualified Data.Binary.Get as Binary.Get
@@ -42,6 +47,7 @@ import           Data.ByteString.Lazy.Internal (ByteString (Chunk, Empty))
 import           Data.IORef (IORef, atomicModifyIORef, newIORef)
 import           System.IO (Handle, hSetBinaryMode)
 import           System.IO.Unsafe (unsafeInterleaveIO)
+import qualified System.Mem.Weak as Weak
 
 -- * Reader
 
@@ -174,6 +180,32 @@ newWriterWith
   -> Writer
 newWriterWith =
   Writer
+
+-- * Pipe
+
+-- | Create a connected pair of 'Reader' and 'Writer'.
+--
+-- @since 0.2.0
+newPipe :: IO (Reader, Writer)
+newPipe = do
+  chan <- Chan.newChan
+  mvar <- MVar.newMVar chan
+
+  Weak.addFinalizer chan (void (MVar.tryTakeMVar mvar))
+
+  let
+    read = do
+      mbChan <- MVar.tryReadMVar mvar
+      maybe (pure ByteString.Strict.empty) Chan.readChan mbChan
+
+    write msg =
+      unless (ByteString.Strict.null msg) $
+        Chan.writeChan chan msg
+
+  reader <- newReaderWith read
+  let writer = newWriterWith write
+
+  pure (reader, writer)
 
 -- * Duplex
 

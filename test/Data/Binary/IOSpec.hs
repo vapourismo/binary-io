@@ -174,3 +174,12 @@ spec = do
         closeHandle handleWrite
 
         Hspec.shouldThrow (write writer "Hello World") isIllegalOperation
+
+  Hspec.describe "Pipe" $
+    Hspec.it "is connected" $ do
+      (reader, writer) <- newPipe
+
+      write writer "Hello World"
+      "Hello World" <- read reader
+
+      pure ()
