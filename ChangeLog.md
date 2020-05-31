@@ -3,6 +3,7 @@
 ## 0.2.0
 
 * Add newPipe function that can create a connected Reader and Writer
+* Make Reader more resilient against exceptions that may happen in the provided Get operation
 
 ## 0.1.1
 
