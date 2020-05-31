@@ -4,14 +4,15 @@ module Data.Binary.IOSpec (spec) where
 
 import Prelude hiding (read)
 
-import Control.Exception (Exception)
+import Control.Exception (Exception, throw)
 import Control.Monad (join)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 
 import           Data.Bifoldable (bitraverse_)
-import           Data.Binary (Binary (..))
+import           Data.Binary (Binary (..), encode)
 import           Data.Binary.IO
 import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Lazy as ByteString.Lazy
 import           Data.Foldable (for_)
 import           Data.List (isInfixOf)
 import           Data.Typeable (typeOf)
@@ -105,6 +106,15 @@ spec = do
 
       -- Test something with variable length
       testReads "Hello World"
+
+    Hspec.it "recovers from exception in Get operation" $ do
+      reader <- newReaderWith (pure (ByteString.Lazy.toStrict (encode "Hello World")))
+
+      Hspec.shouldThrow (runGet reader (throw ExampleException)) (\ExampleException -> True)
+
+      "Hello World" <- read reader
+
+      pure ()
 
     withPipe $ do
       -- When the read handle has reached its end, reading from it should not throw an error.

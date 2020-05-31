@@ -34,9 +34,10 @@ where
 import Prelude hiding (read)
 
 import qualified Control.Concurrent.Chan as Chan
+import           Control.Concurrent.MVar (MVar, modifyMVar, newMVar)
 import qualified Control.Concurrent.MVar as MVar
 import qualified Control.Exception as Exception
-import           Control.Monad (join, unless, void)
+import           Control.Monad (unless, void)
 import           Data.Bifunctor (bimap)
 import qualified Data.Binary as Binary
 import qualified Data.Binary.Get as Binary.Get
@@ -44,7 +45,6 @@ import qualified Data.Binary.Put as Binary.Put
 import qualified Data.ByteString as ByteString.Strict
 import qualified Data.ByteString.Lazy as ByteString
 import           Data.ByteString.Lazy.Internal (ByteString (Chunk, Empty))
-import           Data.IORef (IORef, atomicModifyIORef, newIORef)
 import           System.IO (Handle, hSetBinaryMode)
 import           System.IO.Unsafe (unsafeInterleaveIO)
 import qualified System.Mem.Weak as Weak
@@ -106,17 +106,12 @@ newStationaryReaderWith get =
   StationaryReader <$> mkStream get
 
 -- | @since 0.0.1
-newtype Reader = Reader (IORef StationaryReader)
+newtype Reader = Reader (MVar StationaryReader)
 
 runReader :: Reader -> Binary.Get a -> IO a
 runReader (Reader readerVar) getter =
-  -- We use 'atomicModifyIORef' which does not force the 'StationaryReader' to WHNF. Forcing the
-  -- 'StationaryReader' might block indefinitely because it will try to read more from the
-  -- underlying 'Handle'.
-  join $ atomicModifyIORef readerVar $ \posReader ->
-    case runStationaryReader posReader getter of
-      Left error   -> (posReader, Exception.throwIO error)
-      Right result -> pure <$> result
+  modifyMVar readerVar $ \posReader ->
+    either Exception.throwIO pure (runStationaryReader posReader getter)
 
 -- | Create a new reader.
 --
@@ -139,7 +134,7 @@ newReader
   -> IO Reader
 newReader handle = do
   posReader <- newStationaryReader handle
-  Reader <$> newIORef posReader
+  Reader <$> newMVar posReader
 
 -- | This function works very similar to 'newReader' except no 'Handle' is involved.
 --
@@ -149,7 +144,7 @@ newReaderWith
   -> IO Reader
 newReaderWith get = do
   posReader <- newStationaryReaderWith get
-  Reader <$> newIORef posReader
+  Reader <$> newMVar posReader
 
 -- * Writer
 
