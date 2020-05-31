@@ -6,7 +6,6 @@ import Prelude hiding (read)
 
 import Control.Exception (Exception, throw)
 import Control.Monad (join)
-import Control.Monad.IO.Class (MonadIO (liftIO))
 
 import           Data.Bifoldable (bitraverse_)
 import           Data.Binary (Binary (..), encode)
@@ -120,7 +119,7 @@ spec = do
       -- When the read handle has reached its end, reading from it should not throw an error.
       -- However, no more input can be read therefore the underling 'Get' parser should fail.
       Hspec.it "throws ReaderGetError when Handle is EOF" $ \(handleRead, handleWrite) -> do
-        reader <- liftIO (newReader handleRead)
+        reader <- newReader handleRead
 
         IO.hClose handleWrite
         eof <- IO.hIsEOF handleRead
@@ -130,7 +129,7 @@ spec = do
 
       -- Reading from a closed handle should throw. That exception needs to surface.
       Hspec.it "throws IllegalOperation when read Handle is closed" $ \(handleRead, _handleWrite) -> do
-        reader <- liftIO (newReader handleRead)
+        reader <- newReader handleRead
 
         closeHandle handleRead
 
@@ -138,7 +137,7 @@ spec = do
 
       -- Failing 'Get' operations should not advance the stream position.
       Hspec.it "preserves the stream position when Get operation fails" $ \(handleRead, handleWrite) -> do
-        reader <- liftIO (newReader handleRead)
+        reader <- newReader handleRead
 
         write handleWrite "Hello World"
         Hspec.shouldThrow (read reader :: IO BadGet) (\ReaderGetError{} -> True)
