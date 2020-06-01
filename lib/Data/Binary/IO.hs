@@ -25,6 +25,7 @@ module Data.Binary.IO
     -- * Classes
   , CanGet (..)
   , read
+  , isEmpty
 
   , CanPut (..)
   , write
@@ -249,6 +250,23 @@ instance CanGet Reader where
 instance CanGet Duplex where
   runGet = runGet . duplexReader
 
+-- | Read something from @r@.
+--
+-- @since 0.0.1
+read
+  :: (CanGet r, Binary.Binary a)
+  => r -- ^ Read source
+  -> IO a
+read reader =
+  runGet reader Binary.get
+
+-- | Check if there is no more input to consume. This function may block. All properties of 'runGet'
+-- apply to this function as well.
+--
+-- @since 0.2.1
+isEmpty :: CanGet r => r -> IO Bool
+isEmpty reader = runGet reader Binary.Get.isEmpty
+
 -- | @w@ can execute 'Binary.Put' operations
 --
 -- @since 0.0.1
@@ -267,16 +285,6 @@ instance CanPut Writer where
 
 instance CanPut Duplex where
   runPut = runPut . duplexWriter
-
--- | Read something from @r@.
---
--- @since 0.0.1
-read
-  :: (CanGet r, Binary.Binary a)
-  => r -- ^ Read source
-  -> IO a
-read reader =
-  runGet reader Binary.get
 
 -- | Write something to @w@.
 --
