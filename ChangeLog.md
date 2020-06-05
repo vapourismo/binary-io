@@ -1,5 +1,9 @@
 # binary-io
 
+## 0.2.1
+
+* Add isEmpty function to check if a read source has no more input available
+
 ## 0.2.0
 
 * Add newPipe function that can create a connected Reader and Writer
