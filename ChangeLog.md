@@ -3,6 +3,7 @@
 ## 0.2.1
 
 * Add isEmpty function to check if a read source has no more input available
+* Enhance newPipe to produce a Reader that detects when its paired Writer went out-of-scope
 
 ## 0.2.0
 

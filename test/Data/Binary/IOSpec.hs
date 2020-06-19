@@ -184,7 +184,7 @@ spec = do
 
         Hspec.shouldThrow (write writer "Hello World") isIllegalOperation
 
-  Hspec.describe "Pipe" $
+  Hspec.describe "Pipe" $ do
     Hspec.it "is connected" $ do
       (reader, writer) <- newPipe
 
@@ -192,3 +192,9 @@ spec = do
       "Hello World" <- read reader
 
       pure ()
+
+    Hspec.it "ends if writer is out of scope" $ do
+      (reader, _writer) <- newPipe
+
+      isEmpty <- isEmpty reader
+      Hspec.shouldBe isEmpty True

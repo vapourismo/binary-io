@@ -34,21 +34,22 @@ where
 
 import Prelude hiding (read)
 
-import qualified Control.Concurrent.Chan as Chan
 import           Control.Concurrent.MVar (MVar, modifyMVar, newMVar)
-import qualified Control.Concurrent.MVar as MVar
 import qualified Control.Exception as Exception
-import           Control.Monad (unless, void)
+import           Control.Monad (join, unless)
 import           Data.Bifunctor (bimap)
 import qualified Data.Binary as Binary
 import qualified Data.Binary.Get as Binary.Get
+import           Data.Binary.IO.Internal.AwaitNotify (newAwaitNotify, runAwait, runNotify)
 import qualified Data.Binary.Put as Binary.Put
 import qualified Data.ByteString as ByteString.Strict
 import qualified Data.ByteString.Lazy as ByteString
 import           Data.ByteString.Lazy.Internal (ByteString (Chunk, Empty))
+import           Data.IORef (atomicModifyIORef', mkWeakIORef, newIORef)
+import qualified Deque.Strict as Deque
 import           System.IO (Handle, hSetBinaryMode)
 import           System.IO.Unsafe (unsafeInterleaveIO)
-import qualified System.Mem.Weak as Weak
+import           System.Mem.Weak (deRefWeak)
 
 -- * Reader
 
@@ -184,19 +185,26 @@ newWriterWith =
 -- @since 0.2.0
 newPipe :: IO (Reader, Writer)
 newPipe = do
-  chan <- Chan.newChan
-  mvar <- MVar.newMVar chan
-
-  Weak.addFinalizer chan (void (MVar.tryTakeMVar mvar))
+  chan <- newIORef mempty
+  weakChan <- mkWeakIORef chan (pure ())
+  (await, notify) <- newAwaitNotify
 
   let
     read = do
-      mbChan <- MVar.tryReadMVar mvar
-      maybe (pure ByteString.Strict.empty) Chan.readChan mbChan
+      mbChan <- deRefWeak weakChan
+      case mbChan of
+        Nothing -> pure ByteString.Strict.empty
+        Just chan -> join $
+          atomicModifyIORef' chan $ \queue ->
+            case Deque.uncons queue of
+              Just (elem, queue) -> (queue, pure elem)
+              Nothing -> (queue, runAwait await >> read)
 
     write msg =
-      unless (ByteString.Strict.null msg) $
-        Chan.writeChan chan msg
+      unless (ByteString.Strict.null msg) $ do
+        atomicModifyIORef' chan $ \queue ->
+          (Deque.snoc msg queue, ())
+        runNotify notify
 
   reader <- newReaderWith read
   let writer = newWriterWith write

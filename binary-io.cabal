@@ -53,13 +53,16 @@ library
   build-depends:
     base == 4.*,
     bytestring,
-    binary >= 0.7.2
+    binary >= 0.7.2,
+    process,
+    deque
 
   hs-source-dirs:
     lib
 
   exposed-modules:
     Data.Binary.IO
+    Data.Binary.IO.Internal.AwaitNotify
 
 test-suite binary-io-tests
   type:
@@ -69,7 +72,7 @@ test-suite binary-io-tests
     Haskell2010
 
   ghc-options:
-    -Wall -Wextra -Wno-name-shadowing
+    -Wall -Wextra -Wno-name-shadowing -threaded -with-rtsopts=-N
 
   build-depends:
     base,
@@ -77,13 +80,16 @@ test-suite binary-io-tests
     binary-io,
     bytestring,
     process,
-    hspec
+    hspec >= 2.7.1,
+    async,
+    stm
 
   hs-source-dirs:
     test
 
   other-modules:
     Data.Binary.IOSpec
+    Data.Binary.IO.Internal.AwaitNotifySpec
 
   main-is:
     Main.hs
