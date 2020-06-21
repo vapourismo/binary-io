@@ -1,3 +1,12 @@
 cradle:
-  cabal:
-    component: "lib:binary-io"
+  multi:
+    - path: "./lib"
+      config:
+        cradle:
+          cabal:
+            component: "lib:binary-io"
+    - path: "./test"
+      config:
+        cradle:
+          cabal:
+            component: "test:binary-io-tests"
