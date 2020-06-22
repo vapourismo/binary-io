@@ -1,4 +1,5 @@
 {-# LANGUAGE NumericUnderscores #-}
+
 module Data.Binary.IO.Internal.AwaitNotifySpec (spec) where
 
 import           Control.Concurrent (forkIO, threadDelay)
