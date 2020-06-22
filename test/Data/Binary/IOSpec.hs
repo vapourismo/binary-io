@@ -191,7 +191,8 @@ spec = do
       write writer "Hello World"
       "Hello World" <- read reader
 
-      pure ()
+      empty <- isEmpty reader
+      empty `Hspec.shouldBe` True
 
     Hspec.it "ends if writer is out of scope" $ do
       (reader, _writer) <- newPipe
