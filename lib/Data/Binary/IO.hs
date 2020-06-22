@@ -139,6 +139,8 @@ newReader handle = do
   Reader <$> newMVar posReader
 
 -- | This function works very similar to 'newReader' except no 'Handle' is involved.
+-- The chunk producers indicates the end of the stream by returning an empty
+-- 'ByteString.Strict.ByteString'.
 --
 -- @since 0.1.1
 newReaderWith
