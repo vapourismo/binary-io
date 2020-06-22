@@ -273,7 +273,7 @@ read reader =
 -- | Check if there is no more input to consume. This function may block. All properties of 'runGet'
 -- apply to this function as well.
 --
--- @since 0.2.1
+-- @since 0.3.0
 isEmpty :: CanGet r => r -> IO Bool
 isEmpty reader = runGet reader Binary.Get.isEmpty
 
