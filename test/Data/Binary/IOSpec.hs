@@ -1,12 +1,12 @@
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Data.Binary.IOSpec (spec) where
 
 import Prelude hiding (read)
 
-import Control.Exception (Exception, throw)
-import Control.Monad (join)
-
+import           Control.Exception (Exception, throw)
+import           Control.Monad (join)
 import           Data.Bifoldable (bitraverse_)
 import           Data.Binary (Binary (..), encode)
 import           Data.Binary.IO
@@ -15,12 +15,10 @@ import qualified Data.ByteString.Lazy as ByteString.Lazy
 import           Data.Foldable (for_)
 import           Data.List (isInfixOf)
 import           Data.Typeable (typeOf)
-
-import qualified Test.Hspec as Hspec
-
 import qualified System.IO as IO
 import           System.IO.Error (ioeGetErrorString, isIllegalOperation)
 import           System.Process (createPipe)
+import qualified Test.Hspec as Hspec
 
 -- | Create a pipe with no buffering on read and write side.
 createUnbufferedPipe :: IO (IO.Handle, IO.Handle)

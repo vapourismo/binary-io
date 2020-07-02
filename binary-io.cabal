@@ -5,7 +5,7 @@ name:
   binary-io
 
 version:
-  0.3.0
+  0.4.0
 
 category:
   Data, Parsing, IO
@@ -48,20 +48,24 @@ library
     Haskell2010
 
   ghc-options:
-    -Wall -Wextra -Wno-name-shadowing
+    -Wall -Wextra -Wno-name-shadowing -Wredundant-constraints
 
   build-depends:
     base == 4.*,
     bytestring,
     binary >= 0.7.2,
     process,
-    deque
+    deque,
+    transformers,
+    concurrency,
+    exceptions
 
   hs-source-dirs:
     lib
 
   exposed-modules:
     Data.Binary.IO
+    Data.Binary.IO.Lifted
     Data.Binary.IO.Internal.AwaitNotify
 
 test-suite binary-io-tests
