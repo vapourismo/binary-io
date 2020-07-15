@@ -15,13 +15,13 @@ module Data.Binary.IO.Lifted
   , Reader (..)
   , newReader
   , newReaderWith
-  , withReader
+  , mapReader
 
     -- * Writer
   , Writer (..)
   , newWriter
   , newWriterWith
-  , withWriter
+  , mapWriter
 
     -- * Pipe
   , newPipe
@@ -30,7 +30,7 @@ module Data.Binary.IO.Lifted
   , Duplex (..)
   , newDuplex
   , newDuplexWith
-  , withDuplex
+  , mapDuplex
 
     -- * Classes
   , CanGet (..)
@@ -146,8 +146,8 @@ newtype Reader m = Reader
 -- | Transform the underlying functor.
 --
 -- @since 0.4.0
-withReader :: (forall a. m a -> n a) -> Reader m -> Reader n
-withReader f (Reader run) = Reader (f . run)
+mapReader :: (forall a. m a -> n a) -> Reader m -> Reader n
+mapReader f (Reader run) = Reader (f . run)
 
 -- | Create a new 'Reader' using an action that provides the chunks.
 --
@@ -233,8 +233,8 @@ newtype Writer m = Writer
 -- | Transform the underlying functor.
 --
 -- @since 0.4.0
-withWriter :: (m () -> n ()) -> Writer m -> Writer n
-withWriter f (Writer write) = Writer (f . write)
+mapWriter :: (m () -> n ()) -> Writer m -> Writer n
+mapWriter f (Writer write) = Writer (f . write)
 
 -- | Create a writer using a function that handles the output chunks.
 --
@@ -329,8 +329,8 @@ data Duplex m = Duplex
 -- | Transform the underlying functor.
 --
 -- @since 0.4.0
-withDuplex :: (forall a. m a -> n a) -> Duplex m -> Duplex n
-withDuplex f (Duplex w r) = Duplex (withWriter f w) (withReader f r)
+mapDuplex :: (forall a. m a -> n a) -> Duplex m -> Duplex n
+mapDuplex f (Duplex w r) = Duplex (mapWriter f w) (mapReader f r)
 
 -- | Create a new duplex. The 'Duplex' inherits all the properties of 'Reader' and 'Writer' when
 -- created with 'newReader' and 'newWriter'.
