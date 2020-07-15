@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -153,9 +154,7 @@ newDuplexWith get push =
 -- | Alias for 'Lifted.CanGet' @r@ 'IO'
 --
 -- @since 0.0.1
-class Lifted.CanGet r IO => CanGet r
-
-instance Lifted.CanGet r IO => CanGet r
+type CanGet r = Lifted.CanGet r IO
 
 -- | Unlifted version of 'Lifted.runGet'
 --
@@ -184,12 +183,10 @@ read reader =
 isEmpty :: CanGet r => r -> IO Bool
 isEmpty reader = runGet reader Binary.Get.isEmpty
 
--- | @w@ can execute 'Binary.Put' operations
+-- | Alias for 'Lifted.CanPut' @w@ 'IO'
 --
 -- @since 0.0.1
-class Lifted.CanPut w IO => CanPut w where
-
-instance Lifted.CanPut w IO => CanPut w where
+type CanPut w = Lifted.CanPut w IO
 
 -- | Unlifted version of 'Lifted.runPut'
 --
