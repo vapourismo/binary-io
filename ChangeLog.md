@@ -1,5 +1,11 @@
 # binary-io
 
+## 0.4.0
+
+* Add module Data.Binary.IO.Lifted module which contains versions of all functions and types
+  for the use in functors other than IO
+* Make all functions and types in Data.Binary.IO aliases of the ones in the Lifted module
+
 ## 0.3.0
 
 * Add isEmpty function to check if a read source has no more input available
