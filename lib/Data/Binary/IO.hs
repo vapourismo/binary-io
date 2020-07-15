@@ -71,7 +71,7 @@ newReader
 newReader handle =
   Reader <$> Lifted.newReader handle
 
--- | TUnlifted version of 'Lifted.newReaderWith'.
+-- | Unlifted version of 'Lifted.newReaderWith'.
 --
 -- @since 0.1.1
 newReaderWith
