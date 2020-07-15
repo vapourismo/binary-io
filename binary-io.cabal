@@ -16,7 +16,7 @@ synopsis:
 description:
   Read and write values of types that implement Binary
   .
-  See module "Data.Binary.IO".
+  See module "Data.Binary.IO.Lifted".
 
 author:
   Ole Krüger <haskell-binary-io@vprsm.de>
