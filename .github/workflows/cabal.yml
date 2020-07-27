@@ -67,7 +67,7 @@ jobs:
         run: cabal update
 
       - name: Install HLint
-        run: cabal install --installdir=. hlint
+        run: cabal install --installdir=. hlint --constraint 'hlint >= 3'
 
       - name: Run HLint
         run: ./hlint .
