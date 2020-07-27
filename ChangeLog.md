@@ -5,6 +5,7 @@
 * Add module Data.Binary.IO.Lifted module which contains versions of all functions and types
   for the use in functors other than IO
 * Make all functions and types in Data.Binary.IO aliases of the ones in the Lifted module
+* Reduce allocations for Await-Notify pairs
 
 ## 0.3.0
 
