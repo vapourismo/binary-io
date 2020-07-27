@@ -32,6 +32,6 @@ spec =
       result <- runAwait await
       result `Hspec.shouldBe` False
 
-    Hspec.it "can notify without a paired " $ do
+    Hspec.it "can notify without a paired Await" $ do
       (_await, notify) <- newAwaitNotify
       runNotify notify
