@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
+-- | Read and write values of types that implement 'Binary.Binary'.
 module Data.Binary.IO.Lifted
   ( -- * Reader
     ReaderError (..)
