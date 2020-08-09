@@ -46,7 +46,6 @@ where
 
 import           Data.Bifunctor (bimap)
 import qualified Data.Binary as Binary
-import qualified Data.Binary.Get as Binary.Get
 import qualified Data.Binary.IO.Lifted as Lifted
 import qualified Data.ByteString as ByteString
 import           Prelude hiding (read)
@@ -136,8 +135,9 @@ instance Lifted.CanPut Duplex IO where
 newDuplex
   :: Handle -- ^ Handle that will be read from and written to
   -> IO Duplex
-newDuplex handle =
-  Duplex (newWriter handle) <$> newReader handle
+newDuplex handle = do
+  Lifted.Duplex writer reader <- Lifted.newDuplex handle
+  pure (Duplex (Writer writer) (Reader reader))
 
 -- | Unlifted version of 'Lifted.newDuplexWith'
 --
@@ -146,8 +146,9 @@ newDuplexWith
   :: IO ByteString.ByteString
   -> (ByteString.ByteString -> IO ())
   -> IO Duplex
-newDuplexWith get push =
-  Duplex (newWriterWith push) <$> newReaderWith get
+newDuplexWith get push = do
+  Lifted.Duplex writer reader <- Lifted.newDuplexWith get push
+  pure (Duplex (Writer writer) (Reader reader))
 
 -- * Classes
 
@@ -174,14 +175,14 @@ read
   :: (CanGet r, Binary.Binary a)
   => r -- ^ Read source
   -> IO a
-read reader =
-  runGet reader Binary.get
+read =
+  Lifted.read
 
 -- | Unlifted version of 'Lifted.isEmpty'
 --
 -- @since 0.3.0
 isEmpty :: CanGet r => r -> IO Bool
-isEmpty reader = runGet reader Binary.Get.isEmpty
+isEmpty = Lifted.isEmpty
 
 -- | Alias for 'Lifted.CanPut' @w@ 'IO'
 --
@@ -196,7 +197,8 @@ runPut
   => w -- ^ Writer / target
   -> Binary.Put -- ^ Operation to execute
   -> IO ()
-runPut = Lifted.runPut
+runPut =
+  Lifted.runPut
 
 -- | Unlifted version of 'Lifted.write'
 --
