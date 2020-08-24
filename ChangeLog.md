@@ -1,5 +1,9 @@
 # binary-io
 
+## 0.5.0
+
+* Let runPut and company return the result of the PutM operation
+
 ## 0.4.0
 
 * Add module Data.Binary.IO.Lifted module which contains versions of all functions and types

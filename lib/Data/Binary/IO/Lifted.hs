@@ -229,21 +229,24 @@ isEmpty source = runGet source Get.isEmpty
 
 -- | @since 0.4.0
 newtype Writer m = Writer
-  { runWriter :: Binary.Put -> m () }
+  { runWriter :: forall a. Put.PutM a -> m a }
 
 -- | Transform the underlying functor.
 --
 -- @since 0.4.0
-mapWriter :: (m () -> n ()) -> Writer m -> Writer n
+mapWriter :: (forall x. m x -> n x) -> Writer m -> Writer n
 mapWriter f (Writer write) = Writer (f . write)
 
 -- | Create a writer using a function that handles the output chunks.
 --
 -- @since 0.4.0
 newWriterWith
-  :: (ByteString -> m ()) -- ^ Chunk writer
+  :: Functor m
+  => (ByteString -> m ()) -- ^ Chunk writer
   -> Writer m
-newWriterWith write = Writer (write . toStrict . Put.runPut)
+newWriterWith write = Writer $ \put -> do
+  let (result, body) = Put.runPutM put
+  result <$ write (toStrict body)
 
 -- | Create a writer.
 --
@@ -253,15 +256,16 @@ newWriterWith write = Writer (write . toStrict . Put.runPut)
 -- @since 0.4.0
 newWriter
   :: MonadIO m
-  => Handle-- ^ Write target
+  => Handle -- ^ Write target
   -> Writer m
-newWriter handle = newWriterWith (liftIO . ByteString.hPut handle)
+newWriter handle =
+  newWriterWith (liftIO . ByteString.hPut handle)
 
 -- | @w@ can execute 'Binary.Put' operations in @m@
 --
 -- @since 0.4.0
 class CanPut w m where
-  runPut :: w -> Binary.Put -> m ()
+  runPut :: w -> Put.PutM a -> m a
 
 instance CanPut (Writer m) m where
   runPut = runWriter
@@ -270,7 +274,9 @@ instance CanPut (Duplex m) m where
   runPut = runPut . duplexWriter
 
 instance MonadIO m => CanPut Handle m where
-  runPut handle = liftIO . ByteString.hPut handle . toStrict . Put.runPut
+  runPut handle put = do
+    let (result, body) = Put.runPutM put
+    result <$ liftIO (ByteString.hPut handle (toStrict body))
 
 -- | Write something to @w@.
 --

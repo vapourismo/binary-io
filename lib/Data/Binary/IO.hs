@@ -47,6 +47,7 @@ where
 import           Data.Bifunctor (bimap)
 import qualified Data.Binary as Binary
 import qualified Data.Binary.IO.Lifted as Lifted
+import qualified Data.Binary.Put as Put
 import qualified Data.ByteString as ByteString
 import           Prelude hiding (read)
 import           System.IO (Handle)
@@ -195,8 +196,8 @@ type CanPut w = Lifted.CanPut w IO
 runPut
   :: CanPut w
   => w -- ^ Writer / target
-  -> Binary.Put -- ^ Operation to execute
-  -> IO ()
+  -> Put.PutM a -- ^ Operation to execute
+  -> IO a
 runPut =
   Lifted.runPut
 
