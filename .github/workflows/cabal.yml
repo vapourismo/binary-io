@@ -16,8 +16,9 @@ jobs:
     strategy:
       matrix:
         ghc:
-          - "8.10.1"
-          - "8.8.3"
+          - latest
+          - "8.10.2"
+          - "8.8.4"
           - "8.6.5"
     steps:
       - uses: actions/checkout@v2
@@ -25,12 +26,6 @@ jobs:
       - uses: actions/setup-haskell@v1
         with:
           ghc-version: ${{ matrix.ghc }}
-          cabal-version: "3.2"
-
-      - uses: actions/cache@v1
-        with:
-          path: ~/.cabal
-          key: cabal-root-${{ matrix.ghc }}
 
       - name: Update Hackage snapshot
         run: cabal update
@@ -46,22 +41,10 @@ jobs:
 
   HLint:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        ghc:
-          - "8.10.1"
     steps:
       - uses: actions/checkout@v2
 
       - uses: actions/setup-haskell@v1
-        with:
-          ghc-version: ${{ matrix.ghc }}
-          cabal-version: "3.2"
-
-      - uses: actions/cache@v1
-        with:
-          path: ~/.cabal
-          key: cabal-root-${{ matrix.ghc }}
 
       - name: Update Hackage snapshot
         run: cabal update
