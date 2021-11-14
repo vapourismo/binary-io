@@ -1,6 +1,6 @@
 # binary-io
 
-## Unreleased
+## 0.6.0
 
 * Respect chunking from the underlying PutM when writing resulting ByteStrings
 
