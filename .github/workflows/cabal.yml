@@ -16,10 +16,18 @@ jobs:
     strategy:
       matrix:
         ghc:
-          - latest
+          - "9.0.1"
           - "8.10.7"
           - "8.8.4"
           - "8.6.5"
+        may-fail:
+          - false
+        include:
+          - ghc: "9.2.1"
+            may-fail: true
+          - ghc: "latest"
+            may-fail: true
+    continue-on-error: ${{ matrix.may-fail }}
     steps:
       - uses: actions/checkout@v2
 
