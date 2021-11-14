@@ -1,5 +1,9 @@
 # binary-io
 
+## Unreleased
+
+* Respect chunking from the underlying PutM when writing resulting ByteStrings
+
 ## 0.5.0
 
 * Let runPut and company return the result of the PutM operation

@@ -58,7 +58,8 @@ import           Data.Binary.IO.Internal.AwaitNotify (newAwaitNotify, runAwait, 
 import qualified Data.Binary.Put as Put
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
-import           Data.ByteString.Lazy (toStrict)
+import           Data.ByteString.Lazy (toChunks, toStrict)
+import           Data.Foldable (traverse_)
 import           Data.IORef (atomicModifyIORef', mkWeakIORef, newIORef)
 import qualified Deque.Strict as Deque
 import           System.IO (Handle, hSetBinaryMode)
@@ -241,12 +242,14 @@ mapWriter f (Writer write) = Writer (f . write)
 --
 -- @since 0.4.0
 newWriterWith
-  :: Functor m
+  :: Applicative m
   => (ByteString -> m ()) -- ^ Chunk writer
   -> Writer m
 newWriterWith write = Writer $ \put -> do
   let (result, body) = Put.runPutM put
-  result <$ write (toStrict body)
+  result <$
+    -- Instead of allocating a single big
+    traverse_ write (toChunks body)
 
 -- | Create a writer.
 --
