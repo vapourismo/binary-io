@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - uses: actions/setup-haskell@v1.2
+      - uses: haskell/actions/setup@v1.2
         with:
           ghc-version: ${{ matrix.ghc }}
 
@@ -44,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - uses: actions/setup-haskell@v1.2
+      - uses: haskell/actions/setup@v1.2
 
       - name: Update Hackage snapshot
         run: cabal update
