@@ -1,2 +1,4 @@
 - ignore:
-    name: Use infix
+      name: Use infix
+- ignore:
+      name: Eta reduce
