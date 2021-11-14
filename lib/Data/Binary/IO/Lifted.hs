@@ -202,7 +202,7 @@ class CanGet r m where
   runGet :: r -> Binary.Get a -> m a
 
 instance CanGet (Reader m) m where
-  runGet = runReader
+  runGet reader get = runReader reader get
 
 instance CanGet (Duplex m) m where
   runGet = runGet . duplexReader
@@ -271,7 +271,7 @@ class CanPut w m where
   runPut :: w -> Put.PutM a -> m a
 
 instance CanPut (Writer m) m where
-  runPut = runWriter
+  runPut writer put = runWriter writer put
 
 instance CanPut (Duplex m) m where
   runPut = runPut . duplexWriter
