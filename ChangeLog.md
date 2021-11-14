@@ -1,5 +1,9 @@
 # binary-io
 
+## 0.6.1
+
+* Remove eta-reductions that cause GHC 9 builds to fail
+
 ## 0.6.0
 
 * Respect chunking from the underlying PutM when writing resulting ByteStrings
