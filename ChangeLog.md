@@ -3,6 +3,7 @@
 ## Unreleased
 
 * Revert changes from 0.6.0 in order to preserve write atomicity
+* Implement StationaryReader which powers Reader without concurrency primitives
 
 ## 0.6.1
 
