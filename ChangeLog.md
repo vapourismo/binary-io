@@ -1,5 +1,9 @@
 # binary-io
 
+## Unreleased
+
+* Revert changes from 0.6.0 in order to preserve write atomicity
+
 ## 0.6.1
 
 * Remove eta-reductions that cause GHC 9 builds to fail

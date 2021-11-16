@@ -10,9 +10,12 @@ import           Control.Monad (join)
 import           Data.Bifoldable (bitraverse_)
 import           Data.Binary (Binary (..), encode)
 import           Data.Binary.IO
+import           Data.Binary.Put (putByteString)
 import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Char8 as ByteString.Char8
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import           Data.Foldable (for_)
+import           Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import           Data.List (isInfixOf)
 import           Data.Typeable (typeOf)
 import qualified System.IO as IO
@@ -80,7 +83,7 @@ withPipe :: Hspec.SpecWith (IO.Handle, IO.Handle) -> Hspec.Spec
 withPipe = Hspec.before createUnbufferedPipe
 
 spec :: Hspec.Spec
-spec = do
+spec = Hspec.parallel $ do
   Hspec.describe "Reader" $ do
     let
       testReads value =
@@ -181,6 +184,22 @@ spec = do
         closeHandle handleWrite
 
         Hspec.shouldThrow (write writer "Hello World") isIllegalOperation
+
+    Hspec.it "preserves atomicity" $ do
+      chunksRef <- newIORef []
+
+      let
+        writer = newWriterWith $ \chunk -> atomicModifyIORef' chunksRef $ \chunks ->
+          (chunks ++ [chunk], ())
+
+      runPut writer $ putByteString $ ByteString.Char8.pack "Hello"
+      runPut writer $ putByteString $ ByteString.Char8.pack "World"
+      runPut writer $ do
+        putByteString $ ByteString.Char8.pack "Hello"
+        putByteString $ ByteString.Char8.pack "World"
+
+      chunks <- readIORef chunksRef
+      chunks `Hspec.shouldBe` map ByteString.Char8.pack ["Hello", "World", "HelloWorld"]
 
   Hspec.describe "Pipe" $ do
     Hspec.it "is connected" $ do
