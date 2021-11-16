@@ -45,7 +45,6 @@ where
 
 import Prelude hiding (read)
 
-import           Control.Arrow ((&&&))
 import qualified Control.Concurrent.Classy as Concurrent
 import           Control.Monad (join, unless)
 import qualified Control.Monad.Catch as Catch
@@ -102,43 +101,36 @@ newtype StationaryReader m = StationaryReader
 
 newStationaryReaderWith
   :: forall m
-  .  Concurrent.MonadConc m
+  .  Catch.MonadMask m
   => m ByteString
   -> m (StationaryReader m)
 newStationaryReaderWith getChunk = do
-  inputRef <- Concurrent.newIORef ByteString.empty
-
   let
-    make = StationaryReader $ \get -> do
-      input <- lift $ Concurrent.readIORef inputRef
-      loop $ Get.pushChunk (Get.runGetIncremental get) input
+    make initialInput = StationaryReader $ \get ->
+      loop initialInput $ Get.pushChunk (Get.runGetIncremental get) initialInput
 
-    loop :: Get.Decoder a -> ExceptT ReaderError m (StationaryReader m, a)
-    loop = \case
-      Get.Fail remainingBody offset errorMessage -> do
-        input <- lift $ Concurrent.readIORef inputRef
+    loop :: ByteString -> Get.Decoder a -> ExceptT ReaderError m (StationaryReader m, a)
+    loop inputForError = \case
+      Get.Fail remainingBody offset errorMessage ->
         except $ Left ReaderGetError
           { readerErrorRemaining = remainingBody
           , readerErrorOffset = offset
-          , readerErrorInput = input
+          , readerErrorInput = inputForError
           , readerErrorMessage = errorMessage
           }
 
       Get.Done remainingBody _ value -> Catch.mask_ $ do
-        lift $ Concurrent.writeIORef inputRef remainingBody
-        pure (make, value)
+        pure (make remainingBody, value)
 
       Get.Partial continue -> do
-        chunk <- lift $ Catch.mask $ \restore -> do
-          chunk <- restore getChunk
+        chunk <- lift getChunk
+        loop (inputForError <> chunk) $ continue $
           if ByteString.null chunk then
-            pure Nothing
+            Nothing
           else
-            Concurrent.atomicModifyIORef' inputRef $ (<> chunk) &&& const (Just chunk)
+            Just chunk
 
-        loop $ continue chunk
-
-  pure make
+  pure (make ByteString.empty)
 
 -- | @since 0.4.0
 newtype Reader m = Reader
