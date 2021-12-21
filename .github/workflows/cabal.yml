@@ -23,6 +23,9 @@ jobs:
           - "8.6.5"
         may-fail:
           - false
+        include:
+          - ghc: latest
+            may-fail: true
     continue-on-error: ${{ matrix.may-fail }}
     steps:
       - uses: actions/checkout@v2
