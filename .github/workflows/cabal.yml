@@ -17,7 +17,7 @@ jobs:
       matrix:
         ghc:
           - "9.2.1"
-          - "9.0.1"
+          - "9.0.2"
           - "8.10.7"
           - "8.8.4"
           - "8.6.5"
@@ -65,7 +65,7 @@ jobs:
 
       - uses: haskell/actions/setup@v1.2
         with:
-          ghc-version: "8.10.7"
+          ghc-version: "9.0.2"
 
       - name: Install HLint
         run: cabal install --installdir=. hlint --constraint 'hlint >= 3.3'
